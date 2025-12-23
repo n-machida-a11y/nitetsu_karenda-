@@ -1,0 +1,41 @@
+function transferAndSplitData() {
+  // スプレッドシートをアクティブにする
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 「貼付」と「確認と修正」シートを取得する
+  const sourceSheet = spreadsheet.getSheetByName('貼付');
+  const destinationSheet = spreadsheet.getSheetByName('確認と修正');
+  
+  // 「確認と修正」シートが存在しない場合は作成する
+  if (!destinationSheet) {
+    destinationSheet = spreadsheet.insertSheet('確認と修正');
+  } else {
+    // 既存のデータをクリアする
+    destinationSheet.clear();
+  }
+  
+  // 「貼付」シートの全データを取得する
+  const data = sourceSheet.getDataRange().getValues();
+  
+  // 転記する新しいデータ配列を準備する
+  const newData = [];
+  
+  // データを1行ずつ処理する
+  for (let i = 0; i < data.length; i++) {
+    // 1行目のヘッダーはそのままコピーする
+    if (i === 0) {
+      newData.push(data[i][0].split(','));
+      continue;
+    }
+    
+    // 1行目以降のデータをカンマで分割する
+    const row = data[i][0].split(',');
+    newData.push(row);
+  }
+  
+  // 「確認と修正」シートに新しいデータを書き込む
+  destinationSheet.getRange(1, 1, newData.length, newData[0].length).setValues(newData);
+  
+  // 完了メッセージを表示する
+  SpreadsheetApp.getUi().alert('データの転記と分解が完了しました。');
+}
