@@ -1,0 +1,20 @@
+function clearSheets() {
+  // スプレッドシートをアクティブにする
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 「貼付」と「確認と修正」シートを取得する
+  const sourceSheet = spreadsheet.getSheetByName('貼付');
+  const destinationSheet = spreadsheet.getSheetByName('確認と修正');
+  
+  // 各シートが存在する場合、内容をクリアする
+  if (sourceSheet) {
+    sourceSheet.clear();
+  }
+  
+  if (destinationSheet) {
+    destinationSheet.clear();
+  }
+  
+  // 完了メッセージを表示する
+  SpreadsheetApp.getUi().alert('「貼付」と「確認と修正」シートの内容がクリアされました。');
+}
