@@ -1,0 +1,37 @@
+function appendDataToHolidays() {
+  // スプレッドシートをアクティブにする
+  const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+  // 「確認と修正」シートと「Holidays」シートを取得する
+  const sourceSheet = spreadsheet.getSheetByName('確認と修正');
+  const destinationSheet = spreadsheet.getSheetByName('Holidays');
+
+  // 「Holidays」シートが存在しない場合は作成する
+  if (!destinationSheet) {
+    destinationSheet = spreadsheet.insertSheet('Holidays');
+  }
+
+  // 「確認と修正」シートの全データを取得する
+  const sourceData = sourceSheet.getDataRange().getValues();
+
+  // ヘッダー行（最初の行）を除外する
+  const dataToAppend = sourceData.slice(1);
+
+  // 追記するデータが存在するか確認
+  if (dataToAppend.length > 0) {
+    // Holidaysシートの最終行を取得
+    const lastRow = destinationSheet.getLastRow();
+    
+    // データの貼り付け開始位置を決定
+    const startRow = lastRow > 0 ? lastRow + 1 : 1;
+
+    // Holidaysシートの一番下にデータを追記
+    destinationSheet.getRange(startRow, 1, dataToAppend.length, dataToAppend[0].length).setValues(dataToAppend);
+
+    // 完了メッセージを表示
+    SpreadsheetApp.getUi().alert('「確認と修正」シートから「Holidays」シートへのデータ追加が完了しました。');
+  } else {
+    // 追記するデータがない場合のメッセージ
+    SpreadsheetApp.getUi().alert('「確認と修正」シートに転記するデータがありませんでした。');
+  }
+}
