@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <title>得意先お休み管理カレンダー</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- FullCalendar CSS & JS -->
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+  <style>
+    body {
+      padding: 20px;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f8f9fa;
+    }
+    #calendar-container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    #calendar {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 15px rgba(0,0,0,0.1);
+    }
+    .fc-event {
+      cursor: pointer;
+      font-size: 0.85em;
+    }
+    .loading-spinner {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1060; /* モーダルより手前に表示 */
+    }
+    .fc-event-main-frame {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 2px 4px;
+    }
+    .client-filter-item {
+        display: inline-block;
+        margin-right: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div id="calendar-container" class="container">
+    <h2 class="text-center mb-4">得意先お休み管理カレンダー</h2>
+   
+    <div class="card p-3 mb-4">
+        <h5 class="card-title">得意先で絞り込み</h5>
+        <div id="client-filters">
+            <div class="form-check form-check-inline client-filter-item">
+                <input class="form-check-input" type="checkbox" value="all" id="filter-all" checked>
+                <label class="form-check-label" for="filter-all">すべて表示</label>
+            </div>
+        </div>
+    </div>
+
+    <div id='calendar'></div>
+  </div>
+
+  <!-- ローディングスピナー -->
+  <div class="spinner-border text-primary loading-spinner d-none" role="status">
+    <span class="visually-hidden">Loading...</span>
+  </div>
+
+  <!-- ★ 新規追加: 操作選択モーダル -->
+  <div class="modal fade" id="actionModal" tabindex="-1" aria-labelledby="actionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="actionModalLabel">操作を選択</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body text-center py-4">
+          <p class="lead">この予定をどうしますか？</p>
+          <button type="button" id="editActionBtn" class="btn btn-primary btn-lg mx-2">編集</button>
+          <button type="button" id="deleteActionBtn" class="btn btn-danger btn-lg mx-2">削除</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 予定追加/編集モーダル (日付入力欄を追加) -->
+  <div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="eventModalLabel">予定の追加/編集</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="eventId">
+          <div class="mb-3">
+            <label for="clientName" class="form-label">得意先名</label>
+            <input type="text" class="form-control" id="clientName" placeholder="株式会社〇〇">
+          </div>
+          <div class="mb-3">
+            <label for="eventTitle" class="form-label">内容（必須）</label>
+            <input type="text" class="form-control" id="eventTitle" placeholder="夏季休暇" required>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="eventStartDate" class="form-label">開始日</label>
+              <input type="date" class="form-control" id="eventStartDate">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="eventEndDate" class="form-label">終了日</label>
+              <input type="date" class="form-control" id="eventEndDate">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <!-- 削除ボタンを操作選択モーダルに移動したため、ここは削除 -->
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+          <button type="button" id="saveButton" class="btn btn-primary">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    let calendar;
+    let allEvents = [];
+    let selectedEvent = null; // クリックされたイベントを保持
+    const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
+    const actionModal = new bootstrap.Modal(document.getElementById('actionModal'));
+
+    function showLoading(show) {
+      document.querySelector('.loading-spinner').classList.toggle('d-none', !show);
+    }
+
+    function populateFilters(events) {
+        const clientFilters = document.getElementById('client-filters');
+        clientFilters.querySelectorAll('.client-filter-item:not(:first-child)').forEach(el => el.remove());
+        const clientNames = [...new Set(events.map(event => event.extendedProps.clientName).filter(Boolean))];
+        clientNames.sort();
+        clientNames.forEach(name => {
+            const div = document.createElement('div');
+            div.className = 'form-check form-check-inline client-filter-item';
+            const input = document.createElement('input');
+            input.className = 'form-check-input client-checkbox';
+            input.type = 'checkbox';
+            input.value = name;
+            input.id = `filter-${name}`;
+            input.checked = true;
+            input.addEventListener('change', filterCalendarEvents);
+            const label = document.createElement('label');
+            label.className = 'form-check-label';
+            label.htmlFor = `filter-${name}`;
+            label.textContent = name;
+            div.appendChild(input);
+            div.appendChild(label);
+            clientFilters.appendChild(div);
+        });
+    }
+
+    function filterCalendarEvents() {
+        const allCheckbox = document.getElementById('filter-all');
+        const clientCheckboxes = document.querySelectorAll('.client-checkbox');
+        let selectedClients = [];
+        if (allCheckbox.checked) {
+            selectedClients = [...new Set(allEvents.map(e => e.extendedProps.clientName))];
+            clientCheckboxes.forEach(cb => cb.checked = true);
+        } else {
+            selectedClients = Array.from(clientCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+        }
+        const filteredEvents = allEvents.filter(event => {
+            const clientName = event.extendedProps.clientName || '';
+            if (!clientName) return true;
+            return selectedClients.includes(clientName);
+        });
+        calendar.removeAllEvents();
+        calendar.addEventSource(filteredEvents);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const calendarEl = document.getElementById('calendar');
+      document.getElementById('filter-all').addEventListener('change', function() {
+          document.querySelectorAll('.client-checkbox').forEach(cb => cb.checked = this.checked);
+          filterCalendarEvents();
+      });
+
+      calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'ja',
+        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' },
+        buttonText: { today: '今日', month: '月', week: '週', list: 'リスト' },
+        height: 'auto',
+        selectable: true,
+        editable: true,
+        eventContent: function(arg) {
+            const clientName = arg.event.extendedProps.clientName || '';
+            const title = arg.event.title;
+            const displayText = clientName ? `<strong>${clientName}</strong>: ${title}` : title;
+            return { html: `<div class="p-1">${displayText}</div>` };
+        },
+        events: function(fetchInfo, successCallback, failureCallback) {
+          showLoading(true);
+          google.script.run
+            .withSuccessHandler(events => {
+              allEvents = events;
+              populateFilters(allEvents);
+              successCallback(allEvents);
+              showLoading(false);
+            })
+            .withFailureHandler(error => {
+              failureCallback(error);
+              alert('カレンダーの読み込みに失敗しました: ' + error.message);
+              showLoading(false);
+            })
+            .getHolidays();
+        },
+        select: function(info) {
+          document.getElementById('eventId').value = '';
+          document.getElementById('clientName').value = '';
+          document.getElementById('eventTitle').value = '';
+          document.getElementById('eventStartDate').value = info.startStr;
+          const endDate = new Date(info.endStr);
+          endDate.setDate(endDate.getDate() - 1);
+          document.getElementById('eventEndDate').value = endDate.toISOString().split('T')[0];
+          document.getElementById('eventModalLabel').innerText = '予定の追加';
+          eventModal.show();
+        },
+        // ★ 変更: eventClickで操作選択モーダルを表示
+        eventClick: function(info) {
+          selectedEvent = info.event; // クリックされたイベント情報を保持
+          actionModal.show();
+        },
+        eventDrop: function(info) {
+          if (!confirm("この予定の日付を変更しますか？")) {
+            info.revert();
+            return;
+          }
+          showLoading(true);
+          const eventData = {
+            id: info.event.id,
+            title: info.event.title,
+            start: info.event.startStr,
+            end: info.event.endStr,
+            extendedProps: { clientName: info.event.extendedProps.clientName }
+          };
+          google.script.run
+            .withSuccessHandler(() => calendar.refetchEvents())
+            .withFailureHandler(error => {
+              alert('更新に失敗しました: ' + error.message);
+              info.revert();
+              showLoading(false);
+            })
+            .updateHoliday(eventData);
+        }
+      });
+      calendar.render();
+    });
+
+    // ★ 新規追加: 編集ボタンの処理
+    document.getElementById('editActionBtn').addEventListener('click', function() {
+      actionModal.hide();
+      if (!selectedEvent) return;
+
+      document.getElementById('eventId').value = selectedEvent.id;
+      document.getElementById('clientName').value = selectedEvent.extendedProps.clientName || '';
+      document.getElementById('eventTitle').value = selectedEvent.title;
+     
+      const startDate = new Date(selectedEvent.start);
+      startDate.setMinutes(startDate.getMinutes() - startDate.getTimezoneOffset());
+      document.getElementById('eventStartDate').value = startDate.toISOString().split('T')[0];
+
+      let endDate = selectedEvent.end ? new Date(selectedEvent.end) : new Date(selectedEvent.start);
+      if (selectedEvent.end) {
+        endDate.setDate(endDate.getDate() - 1);
+      }
+      endDate.setMinutes(endDate.getMinutes() - endDate.getTimezoneOffset());
+      document.getElementById('eventEndDate').value = endDate.toISOString().split('T')[0];
+
+      document.getElementById('eventModalLabel').innerText = '予定の編集';
+      eventModal.show();
+    });
+
+    // ★ 新規追加: 削除ボタンの処理
+    document.getElementById('deleteActionBtn').addEventListener('click', function() {
+      actionModal.hide();
+      if (!selectedEvent) return;
+      if (!confirm('本当にこの予定を削除しますか？')) return;
+
+      showLoading(true);
+      google.script.run
+        .withSuccessHandler(response => {
+          if (response.status === 'success') {
+            calendar.refetchEvents();
+          } else {
+            alert('削除に失敗: ' + response.message);
+            showLoading(false);
+          }
+        })
+        .withFailureHandler(error => {
+          alert('削除に失敗: ' + error.message);
+          showLoading(false);
+        })
+        .deleteHoliday(selectedEvent.id);
+    });
+
+    // ★ 変更: 保存ボタンの処理を日付編集に対応
+    document.getElementById('saveButton').addEventListener('click', function() {
+      const id = document.getElementById('eventId').value;
+      const title = document.getElementById('eventTitle').value;
+      const clientName = document.getElementById('clientName').value;
+      if (!title) {
+        alert('内容を入力してください。');
+        return;
+      }
+      showLoading(true);
+      eventModal.hide();
+
+      const startDate = document.getElementById('eventStartDate').value;
+      const endDateInput = document.getElementById('eventEndDate').value;
+      const endDate = new Date(endDateInput);
+      endDate.setDate(endDate.getDate() + 1); // FullCalendar用に終了日を+1日する
+      const endStr = endDate.toISOString().split('T')[0];
+
+      const eventData = {
+        id: id,
+        title: title,
+        start: startDate,
+        end: endStr,
+        extendedProps: { clientName: clientName }
+      };
+
+      const handler = google.script.run
+        .withSuccessHandler(response => {
+          if (response && response.status === 'error') {
+            alert('保存に失敗しました: ' + response.message);
+          }
+          calendar.refetchEvents();
+        })
+        .withFailureHandler(error => {
+          alert('保存に失敗しました: ' + error.message);
+          showLoading(false);
+        });
+
+      if (id) {
+        handler.updateHoliday(eventData); // 更新
+      } else {
+        handler.addHoliday(eventData); // 新規追加
+      }
+    });
+  </script>
+</body>
+</html>
