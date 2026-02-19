@@ -1,7 +1,6 @@
-// スプレッドシートのIDをここに設定
-const SPREADSHEET_ID = '1bGWuRqLbUfb1yO1yxDWXqEGob-f1aL74907tJ3nkZeg';
-// シート名を指定
-const SHEET_NAME = 'Holidays'; // シート名はご自身の環境に合わせて変更してください
+// 固定IDの指定を削除し、常に「このスプレッドシート」を参照するように修正
+const SHEET_NAME = 'Holidays';
+const RULE_SHEET_NAME = 'Rules'; // ★変更: ルール管理用シート名
 
 /**
  * Webアプリにアクセスした際にHTMLを返す
@@ -13,131 +12,160 @@ function doGet(e) {
 }
 
 /**
- * 得意先名に基づいて一貫した色を生成する
- * @param {string} clientName - 得意先名
- * @returns {string} HSL形式のカラーコード
+ * 日本の祝日を取得する
  */
-function getClientColor(clientName) {
-  if (!clientName) return '#6c757d'; // 未設定の場合はグレー
-
-  let hash = 0;
-  for (let i = 0; i < clientName.length; i++) {
-    hash = clientName.charCodeAt(i) + ((hash << 5) - hash);
-    hash = hash & hash; // 32bit整数に変換
-  }
- 
-  // HSL色空間を使うことで、見やすい色を生成
-  const hue = Math.abs(hash % 360); // 色相 (0-359)
-  const saturation = 75; // 彩度 (高めに設定)
-  const lightness = 50;  // 明度 (中間)
- 
-  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-}
-
-/**
- * スプレッドシートから休日の予定を取得して返す
- * @returns {Array} 休日のイベントオブジェクトの配列
- */
-function getHolidays() {
+function getJapaneseHolidays() {
   try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
-    if (sheet.getLastRow() < 2) return []; // ヘッダーのみの場合は空配列を返す
-
-    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 6).getValues();
-   
-    const holidays = data.map(row => {
-      if (row[0]) { // IDがあれば処理
-        return {
-          id: row[0],
-          title: row[1],
-          start: row[2] ? new Date(row[2]).toISOString().split('T')[0] : null,
-          end: row[3] ? new Date(row[3]).toISOString().split('T')[0] : null,
-          extendedProps: {
-            clientName: row[4]
-          },
-          backgroundColor: row[5] || getClientColor(row[4]), // 保存された色、なければ生成
-          borderColor: row[5] || getClientColor(row[4])
-        };
-      }
-    }).filter(item => item);
-   
-    return holidays;
+    const calendarId = 'ja.japanese#holiday@group.v.calendar.google.com';
+    const calendar = CalendarApp.getCalendarById(calendarId);
+    const now = new Date();
+    const startTime = new Date(now.getFullYear() - 1, 0, 1);
+    const endTime = new Date(now.getFullYear() + 1, 11, 31);
+    const events = calendar.getEvents(startTime, endTime);
+    
+    return events.map(event => ({
+      title: event.getTitle(),
+      start: Utilities.formatDate(event.getStartTime(), 'JST', 'yyyy-MM-dd'),
+      allDay: true,
+      display: 'background',
+      backgroundColor: '#fff0f0',
+      extendedProps: { isHoliday: true }
+    }));
   } catch (e) {
-    console.error('休日の取得に失敗しました:', e);
+    console.warn('祝日取得エラー', e);
     return [];
   }
 }
 
 /**
- * 新しい休日をスプレッドシートに追加する
- * @param {Object} event - カレンダーで作成されたイベント情報
+ * 得意先名に基づいて一貫した色を生成する
  */
-function addHoliday(event) {
-  try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
-    const newId = Utilities.getUuid();
-    const clientName = event.extendedProps ? event.extendedProps.clientName : '';
-    const color = getClientColor(clientName);
-    const endDate = event.end ? new Date(event.end) : new Date(new Date(event.start).getTime() + 24 * 60 * 60 * 1000);
+function getClientColor(clientName) {
+  if (!clientName) return '#6c757d';
+  let hash = 0;
+  for (let i = 0; i < clientName.length; i++) {
+    hash = clientName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 75%, 50%)`;
+}
 
-    sheet.appendRow([
-      newId,
-      event.title,
-      new Date(event.start),
-      endDate,
-      clientName,
-      color // 生成した色を保存
-    ]);
-    return { status: 'success', id: newId };
+/**
+ * スプレッドシートから休日の予定を取得して返す
+ */
+function getHolidays() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    if (!sheet) {
+      console.warn(`シート「${SHEET_NAME}」が見つかりません。`);
+      return [];
+    }
+
+    let holidays = [];
+    const lastRow = sheet.getLastRow();
+    
+    if (lastRow >= 2) {
+      const data = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+      holidays = data.map(row => {
+        if (!row[0]) return null;
+        const formatDate = (d) => {
+          if (!d) return null;
+          const dateObj = new Date(d);
+          if (isNaN(dateObj.getTime())) return null;
+          return Utilities.formatDate(dateObj, 'JST', 'yyyy-MM-dd');
+        };
+
+        return {
+          id: row[0],
+          title: row[1],
+          start: formatDate(row[2]),
+          end: formatDate(row[3]),
+          extendedProps: { clientName: row[4] },
+          backgroundColor: row[6] || row[5] || getClientColor(row[4]),
+          borderColor: row[6] || row[5] || getClientColor(row[4])
+        };
+      }).filter(item => item);
+    }
+    
+    const jpHolidays = getJapaneseHolidays();
+    return [...holidays, ...jpHolidays];
+    
   } catch (e) {
-    console.error('休日の追加に失敗しました:', e);
-    return { status: 'error', message: e.toString() };
+    throw new Error('データの取得に失敗しました: ' + e.message);
   }
 }
 
 /**
- * 既存の休日の日付や内容を更新する
- * @param {Object} event - 更新されたイベント情報
+ * ★追加: 会社ごとのルールを取得する
+ * 戻り値: { "A社": "ルール内容...", "B社": "ルール内容..." } の形式
  */
+function getClientRules() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RULE_SHEET_NAME);
+    if (!sheet) return {};
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return {};
+
+    // A列:会社名, B列:ルール
+    const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    const rules = {};
+    
+    data.forEach(row => {
+      const name = row[0];
+      const rule = row[1];
+      if (name && rule) {
+        rules[name] = rule;
+      }
+    });
+    
+    return rules;
+  } catch (e) {
+    console.error('ルール取得エラー', e);
+    return {};
+  }
+}
+
+function addHoliday(event) {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    const newId = Utilities.getUuid();
+    const clientName = event.extendedProps ? event.extendedProps.clientName : '';
+    const color = getClientColor(clientName);
+    const startDateObj = new Date(event.start);
+    const endDateObj = event.end ? new Date(event.end) : new Date(startDateObj.getTime() + 24 * 60 * 60 * 1000);
+    sheet.appendRow([newId, event.title, startDateObj, endDateObj, clientName, "", color]);
+    return { status: 'success', id: newId };
+  } catch (e) {
+    return { status: 'error', message: e.toString() };
+  }
+}
+
 function updateHoliday(event) {
   try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
     const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-   
     for (let i = 0; i < data.length; i++) {
       if (data[i][0] == event.id) {
         const rowNum = i + 2;
         const clientName = event.extendedProps ? event.extendedProps.clientName : '';
-        const newColor = getClientColor(clientName);
-        const endDate = event.end ? new Date(event.end) : new Date(new Date(event.start).getTime() + 24 * 60 * 60 * 1000);
-       
-        // 該当行のデータをまとめて更新
-        sheet.getRange(rowNum, 2, 1, 5).setValues([[
-          event.title,
-          new Date(event.start),
-          endDate,
-          clientName,
-          newColor
-        ]]);
+        const color = getClientColor(clientName);
+        const startDateObj = new Date(event.start);
+        const endDateObj = event.end ? new Date(event.end) : new Date(startDateObj.getTime() + 24 * 60 * 60 * 1000);
+        sheet.getRange(rowNum, 2, 1, 6).setValues([[event.title, startDateObj, endDateObj, clientName, "", color]]);
         return { status: 'success' };
       }
     }
     return { status: 'error', message: 'Event not found' };
   } catch (e) {
-    console.error('休日の更新に失敗しました:', e);
     return { status: 'error', message: e.toString() };
   }
 }
 
-/**
- * 休日を削除する
- * @param {string} eventId - 削除するイベントのID
- */
 function deleteHoliday(eventId) {
   try {
-    const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_NAME);
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
     const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-
     for (let i = 0; i < data.length; i++) {
       if (data[i][0] == eventId) {
         sheet.deleteRow(i + 2);
@@ -146,41 +174,26 @@ function deleteHoliday(eventId) {
     }
     return { status: 'error', message: 'Event not found' };
   } catch (e) {
-    console.error('休日の削除に失敗しました:', e);
     return { status: 'error', message: e.toString() };
   }
 }
 
-
-/**
- * 1週間以内に始まる休みをメールで通知する
- * この関数をトリガーで定期実行する
- */
 function checkAndSendNotifications() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const oneWeekLater = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-  const holidays = getHolidays();
-  const upcomingHolidays = holidays.filter(holiday => {
-    const startDate = new Date(holiday.start);
-    return startDate >= today && startDate < oneWeekLater;
+  const holidays = getHolidays().filter(h => !h.extendedProps.isHoliday);
+  const upcoming = holidays.filter(h => {
+    const s = new Date(h.start);
+    return s >= today && s < oneWeekLater;
   });
-
-  if (upcomingHolidays.length > 0) {
-    let mailBody = '直近1週間の得意先お休み情報です。\n\n';
-   
-    upcomingHolidays.sort((a, b) => new Date(a.start) - new Date(b.start));
-   
-    upcomingHolidays.forEach(holiday => {
-      const startDate = new Date(holiday.start);
-      const dateString = `${startDate.getMonth() + 1}/${startDate.getDate()}`;
-      mailBody += `・${dateString} (${holiday.extendedProps.clientName || '未設定'}) - ${holiday.title}\n`;
+  if (upcoming.length > 0) {
+    let body = '直近1週間の得意先お休み情報です。\n\n';
+    upcoming.sort((a, b) => new Date(a.start) - new Date(b.start));
+    upcoming.forEach(h => {
+      const s = new Date(h.start);
+      body += `・${s.getMonth() + 1}/${s.getDate()} (${h.extendedProps.clientName || '未設定'}) - ${h.title}\n`;
     });
-
-    const recipient = Session.getActiveUser().getEmail();
-    const subject = '【通知】直近1週間の得意先お休み情報';
-   
-    MailApp.sendEmail(recipient, subject, mailBody);
+    MailApp.sendEmail(Session.getActiveUser().getEmail(), '【通知】得意先お休み情報', body);
   }
 }
