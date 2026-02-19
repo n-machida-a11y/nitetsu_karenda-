@@ -3,45 +3,30 @@
 <head>
   <base target="_top">
   <title>得意先お休み管理カレンダー</title>
-  <!-- Bootstrap CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- FullCalendar CSS & JS -->
   <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
   <style>
-    body {
-      padding: 20px;
-      font-family: 'Helvetica Neue', Arial, sans-serif;
-      background-color: #f8f9fa;
-    }
-    #calendar-container {
-      max-width: 1100px;
-      margin: 0 auto;
-    }
-    #calendar {
-      background-color: #fff;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 15px rgba(0,0,0,0.1);
-    }
-    .fc-event {
-      cursor: pointer;
-      font-size: 0.85em;
-    }
-    .loading-spinner {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 1060; /* モーダルより手前に表示 */
-    }
-    .fc-event-main-frame {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      padding: 2px 4px;
-    }
-    .client-filter-item {
-        display: inline-block;
-        margin-right: 15px;
+    body { padding: 20px; font-family: "Helvetica Neue", Arial, sans-serif; background-color: #f8f9fa; }
+    #calendar-container { max-width: 1200px; margin: 0 auto; }
+    #calendar { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 15px rgba(0,0,0,0.1); }
+    .loading-spinner { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2000; }
+    .filter-card { margin-bottom: 20px; }
+    .fc-event { cursor: pointer; }
+    .holiday-event { pointer-events: none; opacity: 0.8; }
+    .fc-day-sat { background-color: #f0f8ff; }
+    .fc-day-sun { background-color: #fff0f0; }
+    .holiday-cell { background-color: #fff0f0 !important; }
+    
+    /* ルール表示エリアのスタイル */
+    .rule-box {
+      background-color: #fff3cd;
+      border: 1px solid #ffeeba;
+      color: #856404;
+      padding: 10px;
+      border-radius: 4px;
+      margin-top: 10px;
+      font-size: 0.9rem;
+      display: none; /* デフォルトは非表示 */
     }
   </style>
 </head>
@@ -49,34 +34,43 @@
   <div id="calendar-container" class="container">
     <h2 class="text-center mb-4">得意先お休み管理カレンダー</h2>
    
-    <div class="card p-3 mb-4">
-        <h5 class="card-title">得意先で絞り込み</h5>
-        <div id="client-filters">
-            <div class="form-check form-check-inline client-filter-item">
-                <input class="form-check-input" type="checkbox" value="all" id="filter-all" checked>
-                <label class="form-check-label" for="filter-all">すべて表示</label>
+    <div class="card filter-card p-3">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label fw-bold">キーワード検索</label>
+                <input type="text" id="searchInput" class="form-control" placeholder="例: 夏季休暇">
+            </div>
+            <div class="col-md-8">
+                <label class="form-label fw-bold">得意先で絞り込み</label>
+                <div id="client-filters" class="mt-1">
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="checkbox" value="all" id="filter-all" checked>
+                        <label class="form-check-label" for="filter-all">すべて選択</label>
+                    </div>
+                    <span id="loading-filters" class="text-muted small ms-2">読み込み中...</span>
+                </div>
             </div>
         </div>
+        <!-- ★追加: 絞り込み時に表示するルールエリア -->
+        <div id="filter-rule-display" class="rule-box mt-3"></div>
     </div>
 
     <div id='calendar'></div>
   </div>
 
-  <!-- ローディングスピナー -->
-  <div class="spinner-border text-primary loading-spinner d-none" role="status">
-    <span class="visually-hidden">Loading...</span>
-  </div>
+  <div class="spinner-border text-primary loading-spinner d-none" role="status"></div>
 
-  <!-- ★ 新規追加: 操作選択モーダル -->
-  <div class="modal fade" id="actionModal" tabindex="-1" aria-labelledby="actionModalLabel" aria-hidden="true">
+  <!-- 操作選択モーダル -->
+  <div class="modal fade" id="actionModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="actionModalLabel">操作を選択</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body text-center py-4">
-          <p class="lead">この予定をどうしますか？</p>
+      <div class="modal-content text-center py-4">
+        <h5 class="modal-title mb-3" id="actionModalTitle"></h5>
+        
+        <!-- ★追加: ここにルールを表示 -->
+        <div id="action-rule-display" class="rule-box mx-4 mb-3 text-start"></div>
+        
+        <p class="lead">この予定をどうしますか？</p>
+        <div>
           <button type="button" id="editActionBtn" class="btn btn-primary btn-lg mx-2">編集</button>
           <button type="button" id="deleteActionBtn" class="btn btn-danger btn-lg mx-2">削除</button>
         </div>
@@ -84,37 +78,42 @@
     </div>
   </div>
 
-  <!-- 予定追加/編集モーダル (日付入力欄を追加) -->
-  <div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+  <!-- 予定追加/編集モーダル -->
+  <div class="modal fade" id="eventModal" tabindex="-1">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title" id="eventModalLabel">予定の追加/編集</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          <h5 class="modal-title" id="eventModalLabel">予定の編集</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
           <input type="hidden" id="eventId">
+          
+          <!-- ★追加: 編集時にもルールを表示 -->
+          <div id="modal-rule-display" class="rule-box mb-3"></div>
+
           <div class="mb-3">
-            <label for="clientName" class="form-label">得意先名</label>
-            <input type="text" class="form-control" id="clientName" placeholder="株式会社〇〇">
+            <label class="form-label">得意先名</label>
+            <input type="text" class="form-control" id="clientName" placeholder="株式会社〇〇" list="client-list">
+            <!-- 補完用リスト -->
+            <datalist id="client-list"></datalist>
           </div>
           <div class="mb-3">
-            <label for="eventTitle" class="form-label">内容（必須）</label>
-            <input type="text" class="form-control" id="eventTitle" placeholder="夏季休暇" required>
+            <label class="form-label">内容（必須）</label>
+            <input type="text" class="form-control" id="eventTitle" required placeholder="夏季休暇など">
           </div>
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label for="eventStartDate" class="form-label">開始日</label>
+              <label class="form-label">開始日</label>
               <input type="date" class="form-control" id="eventStartDate">
             </div>
             <div class="col-md-6 mb-3">
-              <label for="eventEndDate" class="form-label">終了日</label>
+              <label class="form-label">終了日</label>
               <input type="date" class="form-control" id="eventEndDate">
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <!-- 削除ボタンを操作選択モーダルに移動したため、ここは削除 -->
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
           <button type="button" id="saveButton" class="btn btn-primary">保存</button>
         </div>
@@ -126,8 +125,10 @@
 
   <script>
     let calendar;
-    let allEvents = [];
-    let selectedEvent = null; // クリックされたイベントを保持
+    let rawEvents = []; 
+    let holidayDates = new Set();
+    let clientRules = {}; // ★追加: 会社ごとのルールを保持するオブジェクト
+    let selectedEvent = null;
     const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
     const actionModal = new bootstrap.Modal(document.getElementById('actionModal'));
 
@@ -135,105 +136,242 @@
       document.querySelector('.loading-spinner').classList.toggle('d-none', !show);
     }
 
-    function populateFilters(events) {
-        const clientFilters = document.getElementById('client-filters');
-        clientFilters.querySelectorAll('.client-filter-item:not(:first-child)').forEach(el => el.remove());
-        const clientNames = [...new Set(events.map(event => event.extendedProps.clientName).filter(Boolean))];
-        clientNames.sort();
-        clientNames.forEach(name => {
+    // ルールを表示するヘルパー関数
+    function displayRule(elementId, clientName) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      
+      const rule = clientRules[clientName];
+      if (rule) {
+        el.innerHTML = `<strong>【${clientName}のルール】</strong><br>${rule}`;
+        el.style.display = 'block';
+      } else {
+        el.style.display = 'none';
+        el.innerHTML = '';
+      }
+    }
+
+    function updateClientFilters(events) {
+        const container = document.getElementById('client-filters');
+        const loadingMsg = document.getElementById('loading-filters');
+        if (loadingMsg) loadingMsg.remove();
+        
+        const existing = container.querySelectorAll('.client-checkbox-item');
+        existing.forEach(function(el) { el.remove(); });
+
+        const clientSet = new Set();
+        // 入力補完用のリストも更新
+        const dataList = document.getElementById('client-list');
+        dataList.innerHTML = '';
+
+        events.forEach(function(e) {
+            const props = e.extendedProps || {};
+            if (!props.isHoliday && props.clientName && props.clientName.trim() !== "") {
+                clientSet.add(props.clientName);
+            }
+        });
+
+        // Rulesシートにあって、まだイベントがない会社もリストに加える（任意）
+        Object.keys(clientRules).forEach(name => clientSet.add(name));
+
+        const clientNames = Array.from(clientSet).sort();
+        
+        clientNames.forEach(function(name) {
+            // フィルタ用チェックボックス
             const div = document.createElement('div');
-            div.className = 'form-check form-check-inline client-filter-item';
-            const input = document.createElement('input');
-            input.className = 'form-check-input client-checkbox';
-            input.type = 'checkbox';
-            input.value = name;
-            input.id = `filter-${name}`;
-            input.checked = true;
-            input.addEventListener('change', filterCalendarEvents);
-            const label = document.createElement('label');
-            label.className = 'form-check-label';
-            label.htmlFor = `filter-${name}`;
-            label.textContent = name;
-            div.appendChild(input);
-            div.appendChild(label);
-            clientFilters.appendChild(div);
+            div.className = 'form-check form-check-inline client-checkbox-item';
+            div.innerHTML = `
+                <input class="form-check-input client-checkbox" type="checkbox" value="${name}" id="filter-${name}" checked>
+                <label class="form-check-label" for="filter-${name}">${name}</label>
+            `;
+            container.appendChild(div);
+
+            // 入力補完用オプション
+            const option = document.createElement('option');
+            option.value = name;
+            dataList.appendChild(option);
+        });
+
+        if (clientNames.length === 0) {
+            const msg = document.createElement('span');
+            msg.className = 'text-muted ms-2 small client-checkbox-item';
+            msg.textContent = 'データなし';
+            container.appendChild(msg);
+        }
+
+        const checkboxes = document.querySelectorAll('.client-checkbox');
+        checkboxes.forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                const allCheckboxes = Array.from(document.querySelectorAll('.client-checkbox'));
+                const isAllChecked = allCheckboxes.every(function(c) { return c.checked; });
+                document.getElementById('filter-all').checked = isAllChecked;
+                calendar.refetchEvents();
+            });
         });
     }
 
-    function filterCalendarEvents() {
-        const allCheckbox = document.getElementById('filter-all');
-        const clientCheckboxes = document.querySelectorAll('.client-checkbox');
-        let selectedClients = [];
-        if (allCheckbox.checked) {
-            selectedClients = [...new Set(allEvents.map(e => e.extendedProps.clientName))];
-            clientCheckboxes.forEach(cb => cb.checked = true);
+    function getFilteredEvents() {
+        const searchInput = document.getElementById('searchInput');
+        const searchText = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        const allChecked = document.getElementById('filter-all').checked;
+        const checkedBoxes = document.querySelectorAll('.client-checkbox:checked');
+        const selectedClients = Array.from(checkedBoxes).map(function(cb) { return cb.value; });
+
+        // ★追加: フィルタリング時に、もし「1社だけ」に絞られていたら、そのルールをトップに表示
+        const ruleDisplay = document.getElementById('filter-rule-display');
+        if (selectedClients.length === 1 && !allChecked) {
+            displayRule('filter-rule-display', selectedClients[0]);
         } else {
-            selectedClients = Array.from(clientCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+            ruleDisplay.style.display = 'none';
         }
-        const filteredEvents = allEvents.filter(event => {
-            const clientName = event.extendedProps.clientName || '';
-            if (!clientName) return true;
-            return selectedClients.includes(clientName);
+
+        return rawEvents.filter(function(event) {
+            const props = event.extendedProps || {};
+            if (props.isHoliday) return true;
+            
+            const title = event.title || "";
+            const clientName = props.clientName || "";
+            const titleMatch = title.toLowerCase().indexOf(searchText) !== -1;
+            const clientNameMatch = clientName.toLowerCase().indexOf(searchText) !== -1;
+            
+            let clientFilterMatch = true;
+            if (!allChecked) {
+                clientFilterMatch = selectedClients.indexOf(clientName) !== -1;
+            }
+            return (titleMatch || clientNameMatch) && clientFilterMatch;
         });
-        calendar.removeAllEvents();
-        calendar.addEventSource(filteredEvents);
+    }
+
+    function extractHolidays(events) {
+        holidayDates.clear();
+        events.forEach(function(e) {
+            if (e.extendedProps && e.extendedProps.isHoliday) {
+                holidayDates.add(e.start);
+            }
+        });
+    }
+
+    // ★ ルールデータの取得
+    function fetchRules() {
+      google.script.run
+        .withSuccessHandler(function(rules) {
+          clientRules = rules || {};
+          // ルール取得後にフィルタ更新（ルールにある会社も補完リストに入れるため）
+          updateClientFilters(rawEvents);
+        })
+        .withFailureHandler(function(err) {
+          console.error('ルール取得失敗', err);
+        })
+        .getClientRules();
     }
 
     document.addEventListener('DOMContentLoaded', function() {
       const calendarEl = document.getElementById('calendar');
+
       document.getElementById('filter-all').addEventListener('change', function() {
-          document.querySelectorAll('.client-checkbox').forEach(cb => cb.checked = this.checked);
-          filterCalendarEvents();
+          const isChecked = this.checked;
+          document.querySelectorAll('.client-checkbox').forEach(function(cb) { cb.checked = isChecked; });
+          calendar.refetchEvents();
+      });
+
+      document.getElementById('searchInput').addEventListener('input', function() { calendar.refetchEvents(); });
+      
+      // 得意先名入力時にルールを表示（新規登録時などに便利）
+      document.getElementById('clientName').addEventListener('input', function() {
+          displayRule('modal-rule-display', this.value);
       });
 
       calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'ja',
+        buttonText: { today: '今日', month: '月', week: '週', day: '日', list: 'リスト' },
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' },
-        buttonText: { today: '今日', month: '月', week: '週', list: 'リスト' },
+        dayCellContent: function(e) { e.dayNumberText = e.dayNumberText.replace('日', ''); return e.dayNumberText; },
+        dayCellClassNames: function(arg) {
+            const offset = arg.date.getTimezoneOffset() * 60000;
+            const dateStr = new Date(arg.date.getTime() - offset).toISOString().split('T')[0];
+            if (holidayDates.has(dateStr)) return ['holiday-cell'];
+            return [];
+        },
         height: 'auto',
         selectable: true,
         editable: true,
-        eventContent: function(arg) {
-            const clientName = arg.event.extendedProps.clientName || '';
-            const title = arg.event.title;
-            const displayText = clientName ? `<strong>${clientName}</strong>: ${title}` : title;
-            return { html: `<div class="p-1">${displayText}</div>` };
-        },
+        
         events: function(fetchInfo, successCallback, failureCallback) {
-          showLoading(true);
-          google.script.run
-            .withSuccessHandler(events => {
-              allEvents = events;
-              populateFilters(allEvents);
-              successCallback(allEvents);
-              showLoading(false);
-            })
-            .withFailureHandler(error => {
-              failureCallback(error);
-              alert('カレンダーの読み込みに失敗しました: ' + error.message);
-              showLoading(false);
-            })
-            .getHolidays();
+          if (rawEvents.length === 0) {
+              showLoading(true);
+              // まずルールを取得
+              fetchRules();
+              
+              google.script.run
+                .withSuccessHandler(function(events) {
+                  rawEvents = events || [];
+                  extractHolidays(rawEvents);
+                  updateClientFilters(rawEvents);
+                  successCallback(getFilteredEvents());
+                  showLoading(false);
+                  calendar.render(); 
+                })
+                .withFailureHandler(function(error) {
+                  alert('データの読み込みに失敗しました: ' + error.message);
+                  failureCallback(error);
+                  showLoading(false);
+                })
+                .getHolidays();
+          } else {
+              successCallback(getFilteredEvents());
+          }
         },
+
+        eventContent: function(arg) {
+            const props = arg.event.extendedProps || {};
+            if (props.isHoliday) {
+                return { html: '<div class="p-1 text-danger small holiday-event">' + arg.event.title + '</div>' };
+            }
+            const client = props.clientName || '未設定';
+            const html = '<div class="p-1"><strong>' + client + '</strong>: ' + arg.event.title + '</div>';
+            return { html: html };
+        },
+
         select: function(info) {
           document.getElementById('eventId').value = '';
           document.getElementById('clientName').value = '';
           document.getElementById('eventTitle').value = '';
+          document.getElementById('modal-rule-display').style.display = 'none'; // ルール表示クリア
+          
           document.getElementById('eventStartDate').value = info.startStr;
-          const endDate = new Date(info.endStr);
-          endDate.setDate(endDate.getDate() - 1);
-          document.getElementById('eventEndDate').value = endDate.toISOString().split('T')[0];
+          let end = new Date(info.endStr);
+          end.setDate(end.getDate() - 1);
+          const y = end.getFullYear();
+          const m = ('0' + (end.getMonth() + 1)).slice(-2);
+          const d = ('0' + end.getDate()).slice(-2);
+          document.getElementById('eventEndDate').value = y + '-' + m + '-' + d;
           document.getElementById('eventModalLabel').innerText = '予定の追加';
           eventModal.show();
         },
-        // ★ 変更: eventClickで操作選択モーダルを表示
+
         eventClick: function(info) {
-          selectedEvent = info.event; // クリックされたイベント情報を保持
+          const props = info.event.extendedProps || {};
+          if (props.isHoliday) return;
+          selectedEvent = info.event;
+          
+          // ★ 追加: タイトルに会社名を表示
+          const clientName = props.clientName || '未設定';
+          document.getElementById('actionModalTitle').innerText = clientName + ' の予定';
+          
+          // ★ 追加: ここでルールを表示
+          displayRule('action-rule-display', clientName);
+
           actionModal.show();
         },
+
         eventDrop: function(info) {
-          if (!confirm("この予定の日付を変更しますか？")) {
+          const props = info.event.extendedProps || {};
+          if (props.isHoliday) {
+             info.revert();
+             return;
+          }
+          if (!confirm("日付を変更しますか？")) {
             info.revert();
             return;
           }
@@ -243,11 +381,14 @@
             title: info.event.title,
             start: info.event.startStr,
             end: info.event.endStr,
-            extendedProps: { clientName: info.event.extendedProps.clientName }
+            extendedProps: { clientName: props.clientName }
           };
           google.script.run
-            .withSuccessHandler(() => calendar.refetchEvents())
-            .withFailureHandler(error => {
+            .withSuccessHandler(function() {
+                rawEvents = [];
+                calendar.refetchEvents();
+            })
+            .withFailureHandler(function(error) {
               alert('更新に失敗しました: ' + error.message);
               info.revert();
               showLoading(false);
@@ -258,96 +399,73 @@
       calendar.render();
     });
 
-    // ★ 新規追加: 編集ボタンの処理
     document.getElementById('editActionBtn').addEventListener('click', function() {
       actionModal.hide();
       if (!selectedEvent) return;
-
+      const props = selectedEvent.extendedProps || {};
+      const clientName = props.clientName || '';
+      
       document.getElementById('eventId').value = selectedEvent.id;
-      document.getElementById('clientName').value = selectedEvent.extendedProps.clientName || '';
+      document.getElementById('clientName').value = clientName;
       document.getElementById('eventTitle').value = selectedEvent.title;
-     
-      const startDate = new Date(selectedEvent.start);
-      startDate.setMinutes(startDate.getMinutes() - startDate.getTimezoneOffset());
-      document.getElementById('eventStartDate').value = startDate.toISOString().split('T')[0];
-
-      let endDate = selectedEvent.end ? new Date(selectedEvent.end) : new Date(selectedEvent.start);
-      if (selectedEvent.end) {
-        endDate.setDate(endDate.getDate() - 1);
-      }
-      endDate.setMinutes(endDate.getMinutes() - endDate.getTimezoneOffset());
-      document.getElementById('eventEndDate').value = endDate.toISOString().split('T')[0];
-
+      document.getElementById('eventStartDate').value = selectedEvent.startStr;
+      
+      // 編集時もルールを表示
+      displayRule('modal-rule-display', clientName);
+      
+      let end = selectedEvent.end ? new Date(selectedEvent.end) : new Date(selectedEvent.start);
+      if (selectedEvent.end) end.setDate(end.getDate() - 1);
+      
+      const y = end.getFullYear();
+      const m = ('0' + (end.getMonth() + 1)).slice(-2);
+      const d = ('0' + end.getDate()).slice(-2);
+      document.getElementById('eventEndDate').value = y + '-' + m + '-' + d;
+      
       document.getElementById('eventModalLabel').innerText = '予定の編集';
       eventModal.show();
     });
 
-    // ★ 新規追加: 削除ボタンの処理
     document.getElementById('deleteActionBtn').addEventListener('click', function() {
       actionModal.hide();
       if (!selectedEvent) return;
       if (!confirm('本当にこの予定を削除しますか？')) return;
-
+      
       showLoading(true);
       google.script.run
-        .withSuccessHandler(response => {
-          if (response.status === 'success') {
-            calendar.refetchEvents();
-          } else {
-            alert('削除に失敗: ' + response.message);
-            showLoading(false);
-          }
+        .withSuccessHandler(function() {
+          rawEvents = [];
+          calendar.refetchEvents();
         })
-        .withFailureHandler(error => {
-          alert('削除に失敗: ' + error.message);
-          showLoading(false);
+        .withFailureHandler(function(error) {
+            alert('削除失敗: ' + error.message);
+            showLoading(false);
         })
         .deleteHoliday(selectedEvent.id);
     });
 
-    // ★ 変更: 保存ボタンの処理を日付編集に対応
     document.getElementById('saveButton').addEventListener('click', function() {
       const id = document.getElementById('eventId').value;
       const title = document.getElementById('eventTitle').value;
-      const clientName = document.getElementById('clientName').value;
-      if (!title) {
-        alert('内容を入力してください。');
-        return;
-      }
-      showLoading(true);
-      eventModal.hide();
-
-      const startDate = document.getElementById('eventStartDate').value;
-      const endDateInput = document.getElementById('eventEndDate').value;
-      const endDate = new Date(endDateInput);
-      endDate.setDate(endDate.getDate() + 1); // FullCalendar用に終了日を+1日する
-      const endStr = endDate.toISOString().split('T')[0];
+      if (!title) return alert('内容を入力してください');
 
       const eventData = {
         id: id,
         title: title,
-        start: startDate,
-        end: endStr,
-        extendedProps: { clientName: clientName }
+        start: document.getElementById('eventStartDate').value,
+        end: document.getElementById('eventEndDate').value,
+        extendedProps: { clientName: document.getElementById('clientName').value }
+      };
+      
+      showLoading(true);
+      eventModal.hide();
+      
+      const callback = function() { 
+        rawEvents = [];
+        calendar.refetchEvents(); 
       };
 
-      const handler = google.script.run
-        .withSuccessHandler(response => {
-          if (response && response.status === 'error') {
-            alert('保存に失敗しました: ' + response.message);
-          }
-          calendar.refetchEvents();
-        })
-        .withFailureHandler(error => {
-          alert('保存に失敗しました: ' + error.message);
-          showLoading(false);
-        });
-
-      if (id) {
-        handler.updateHoliday(eventData); // 更新
-      } else {
-        handler.addHoliday(eventData); // 新規追加
-      }
+      if (id) google.script.run.withSuccessHandler(callback).updateHoliday(eventData);
+      else google.script.run.withSuccessHandler(callback).addHoliday(eventData);
     });
   </script>
 </body>
