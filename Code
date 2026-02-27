@@ -111,8 +111,21 @@
       const result = initDefaultPatterns_();
       patterns = result.patterns || [];
     }
-    const holidays = getHolidays();
-    return { userInfo, areas, clients, patterns, holidays };
+    const holidays         = getHolidays();
+    const attachmentClients = getAttachmentClientNames();
+    return { userInfo, areas, clients, patterns, holidays, attachmentClients };
+  }
+
+  /** 添付ファイルが1件以上ある会社名の配列を返す */
+  function getAttachmentClientNames() {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ATTACHMENT_SHEET_NAME);
+      if (!sheet || sheet.getLastRow() < 2) return [];
+      const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+      return [...new Set(rows.filter(r => r[0]).map(r => String(r[1])))];
+    } catch (e) {
+      return [];
+    }
   }
 
   // =====================================================================

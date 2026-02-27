@@ -78,6 +78,11 @@
       margin-top: 1px;
     }
     .attach-btn:hover { background: #e0e0e0; }
+    .attach-btn.has-attachments {
+      background: #e3f2fd; color: #1565c0;
+      border-color: #90caf9; font-weight: 600;
+    }
+    .attach-btn.has-attachments:hover { background: #bbdefb; }
     .rule-badge { font-size: 0.7rem; color: #856404; background: #fff3cd; border-radius: 10px; padding: 1px 5px; flex-shrink: 0; }
     #sidebarFooter { padding: 8px 12px; border-top: 1px solid #dee2e6; }
     #stopInputBtn {
@@ -559,7 +564,7 @@
 </div>
 
 <!-- ===== 添付ファイルモーダル ===== -->
-<div class="modal fade" id="attachmentModal" tabindex="-1" style="z-index:1055">
+<div class="modal fade" id="attachmentModal" tabindex="-1" style="z-index:1090">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header py-2">
@@ -640,6 +645,7 @@ let preInputFilters = null;            // 入力モード前のフィルター�
 // 添付ファイルモーダル
 let attachmentModal;
 let attachmentModalClient = '';
+let attachmentClients     = new Set(); // 添付ファイルがある会社名の Set
 
 // ドラッグ選択用
 let isDragging    = false;
@@ -741,7 +747,7 @@ document.addEventListener('DOMContentLoaded', () => {
   attachmentModal    = new bootstrap.Modal(document.getElementById('attachmentModal'));
 
   // 設定モーダルの上に重なるモーダルのバックドロップを前面に出す
-  ['editModal','customAlertModal','customConfirmModal','customInputModal'].forEach(id => {
+  ['editModal','customAlertModal','customConfirmModal','customInputModal','attachmentModal'].forEach(id => {
     document.getElementById(id).addEventListener('show.bs.modal', () => {
       setTimeout(() => {
         const bds = document.querySelectorAll('.modal-backdrop');
@@ -816,7 +822,8 @@ function loadAllData() {
       patterns = data.patterns || [];
       rawEvents = data.holidays || [];
 
-      checkedClients = new Set(clients.map(c => c.name));
+      checkedClients  = new Set(clients.map(c => c.name));
+      attachmentClients = new Set(data.attachmentClients || []);
       clientRules = {};
       clients.forEach(c => { if (c.memo && c.memo.trim()) clientRules[c.name] = c.memo.trim(); });
 
@@ -1430,9 +1437,10 @@ function renderClientListTo(listId, allCbId) {
 
     // 添付ファイルボタン
     const attachBtn = document.createElement('button');
-    attachBtn.className = 'attach-btn';
+    const hasAttach = attachmentClients.has(client.name);
+    attachBtn.className = 'attach-btn' + (hasAttach ? ' has-attachments' : '');
     attachBtn.textContent = '📎';
-    attachBtn.title = '添付ファイルを開く';
+    attachBtn.title = hasAttach ? '添付ファイルあり' : '添付ファイルを追加';
     attachBtn.addEventListener('click', () => openAttachmentModal(client.name));
     item.appendChild(attachBtn);
 
@@ -1833,7 +1841,14 @@ function handleAttachmentUpload() {
         document.getElementById('attachUploadBtn').disabled = false;
         if (result.status === 'success') {
           statusEl.textContent = '';
-          openAttachmentModal(attachmentModalClient);
+          document.getElementById('attachFileInput').value = '';
+          document.getElementById('attachMemoInput').value = '';
+          attachmentClients.add(attachmentModalClient);
+          renderSidebar();
+          google.script.run
+            .withSuccessHandler(files => renderAttachmentList(files))
+            .withFailureHandler(() => {})
+            .getAttachments(attachmentModalClient);
         } else {
           statusEl.textContent = 'エラー: ' + result.message;
           statusEl.className = 'text-danger small mt-1';
@@ -1862,7 +1877,16 @@ function deleteAttachmentItem(id, fileName) {
       .withSuccessHandler(result => {
         showLoading(false);
         if (result.status === 'success') {
-          openAttachmentModal(attachmentModalClient);
+          google.script.run
+            .withSuccessHandler(files => {
+              renderAttachmentList(files);
+              if (!files || files.length === 0) {
+                attachmentClients.delete(attachmentModalClient);
+                renderSidebar();
+              }
+            })
+            .withFailureHandler(() => {})
+            .getAttachments(attachmentModalClient);
         } else {
           showAlert('削除エラー: ' + result.message);
         }
