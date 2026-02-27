@@ -798,7 +798,10 @@
       const blob    = Utilities.newBlob(decoded, payload.mimeType, payload.fileName);
       const folder  = getOrCreateAttachmentFolder_();
       const file    = folder.createFile(blob);
-      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      try {
+        // ドメイン内のユーザーがリンクで閲覧可能に設定（外部共有ポリシー対応）
+        file.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
+      } catch (e) { /* 共有設定はベストエフォート（ドメインポリシーで制限されていても続行） */ }
 
       const sheet = getOrCreateSheet_(ATTACHMENT_SHEET_NAME,
         ['ID', '会社名', 'ファイル名', 'DriveファイルID', 'アップロード日時', 'メモ']);
