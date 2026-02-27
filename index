@@ -1,472 +1,2262 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
   <base target="_top">
+  <meta charset="UTF-8">
   <title>得意先お休み管理カレンダー</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
   <style>
-    body { padding: 20px; font-family: "Helvetica Neue", Arial, sans-serif; background-color: #f8f9fa; }
-    #calendar-container { max-width: 1200px; margin: 0 auto; }
-    #calendar { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 15px rgba(0,0,0,0.1); }
-    .loading-spinner { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2000; }
-    .filter-card { margin-bottom: 20px; }
-    .fc-event { cursor: pointer; }
-    .holiday-event { pointer-events: none; opacity: 0.8; }
-    .fc-day-sat { background-color: #f0f8ff; }
-    .fc-day-sun { background-color: #fff0f0; }
-    .holiday-cell { background-color: #fff0f0 !important; }
-    
-    /* ルール表示エリアのスタイル */
-    .rule-box {
-      background-color: #fff3cd;
-      border: 1px solid #ffeeba;
-      color: #856404;
-      padding: 10px;
-      border-radius: 4px;
-      margin-top: 10px;
-      font-size: 0.9rem;
-      display: none; /* デフォルトは非表示 */
+    /* ===== リセット・ベース ===== */
+    html, body { height: 100%; margin: 0; padding: 0; font-family: "Helvetica Neue", Arial, sans-serif; background: #f8f9fa; }
+    body { display: flex; flex-direction: column; }
+
+    /* ===== ヘッダー ===== */
+    #appHeader {
+      display: flex; align-items: center; gap: 10px;
+      background: #1565c0; color: #fff;
+      padding: 8px 16px; flex-shrink: 0; z-index: 200;
+    }
+    #appHeader h1 { font-size: 1rem; margin: 0; flex: 1; }
+    #appHeader .header-right { display: flex; align-items: center; gap: 8px; }
+    #appHeader button { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.4); color: #fff; border-radius: 4px; padding: 4px 10px; font-size: 0.85rem; cursor: pointer; }
+    #appHeader button:hover { background: rgba(255,255,255,0.3); }
+    #settingsBtn { font-size: 1rem !important; padding: 6px 16px !important; font-weight: 600; }
+    #userBadge { font-size: 0.82rem; background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 12px; white-space: nowrap; }
+
+    /* ===== メインレイアウト ===== */
+    #mainLayout { display: flex; flex: 1; overflow: hidden; }
+
+    /* ===== サイドバー ===== */
+    #sidebar {
+      width: 280px; flex-shrink: 0;
+      background: #fff; border-right: 1px solid #dee2e6;
+      overflow-y: auto; display: flex; flex-direction: column;
+    }
+    #sidebarHeader { padding: 10px 12px; border-bottom: 1px solid #dee2e6; background: #f1f3f4; }
+    #sidebarHeader .sidebar-title { font-weight: 600; font-size: 0.85rem; color: #555; margin-bottom: 6px; }
+    #clientList { flex: 1; padding: 4px 0; overflow-y: auto; }
+    .client-item {
+      display: flex; align-items: center; gap: 5px;
+      padding: 6px 10px; cursor: default;
+      border-left: 3px solid transparent;
+      transition: background 0.15s;
+    }
+    .client-item:hover { background: #f0f4ff; }
+    .client-item.input-active {
+      background: #e3f2fd; border-left-color: #1565c0;
+    }
+    .client-item .filter-cb { cursor: pointer; flex-shrink: 0; }
+    .client-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.15); }
+    .client-name-wrap { flex: 1; min-width: 0; padding: 0 4px; }
+    .client-name-label { font-size: 0.92rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .client-item.input-active .client-name-label { font-weight: 700; color: #1565c0; }
+    .client-rule-text { font-size: 0.68rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+    .rule-info-btn {
+      flex-shrink: 0;
+      background: #fff8e1; color: #f57f17;
+      border: 1px solid #ffe082; border-radius: 4px;
+      padding: 2px 5px; font-size: 0.75rem; cursor: pointer;
+      line-height: 1;
+    }
+    .rule-info-btn:hover { background: #fff3cd; }
+    .input-start-btn {
+      flex-shrink: 0;
+      background: #1565c0; color: #fff;
+      border: none; border-radius: 4px;
+      padding: 3px 7px; font-size: 0.72rem; cursor: pointer;
+      white-space: nowrap;
+    }
+    .input-start-btn:hover { background: #0d47a1; }
+    .client-item.input-active .input-start-btn { background: #e53935; }
+    .client-item.input-active .input-start-btn::before { content: '■ '; }
+    .rule-badge { font-size: 0.7rem; color: #856404; background: #fff3cd; border-radius: 10px; padding: 1px 5px; flex-shrink: 0; }
+    #sidebarFooter { padding: 8px 12px; border-top: 1px solid #dee2e6; }
+    #stopInputBtn {
+      font-size: 0.72rem; padding: 2px 7px; border-radius: 4px;
+      border: 1px solid #e53935; color: #e53935; background: #fff;
+      cursor: pointer; white-space: nowrap;
+    }
+    #stopInputBtn:hover { background: #ffebee; }
+
+    /* ===== カレンダーエリア ===== */
+    #calendarArea { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+    /* ===== 備考情報バー ===== */
+    #clientInfoBar {
+      background: #fff8e1; border-bottom: 1px solid #ffe082;
+      padding: 7px 16px; flex-shrink: 0;
+      display: flex; align-items: flex-start; gap: 10px;
+    }
+    #clientInfoBar.d-none { display: none !important; }
+    #clientInfoBar .info-name { font-weight: 700; font-size: 0.88rem; flex-shrink: 0; color: #333; }
+    #clientInfoBar .info-rule { font-size: 0.82rem; color: #555; flex: 1; white-space: pre-wrap; line-height: 1.5; }
+    #clientInfoBar .info-close { flex-shrink: 0; background: none; border: none; cursor: pointer; color: #aaa; font-size: 1rem; padding: 0 2px; line-height: 1; }
+    #clientInfoBar .info-close:hover { color: #c00; }
+
+    /* ===== エリアタブ ===== */
+    #areaTabBar {
+      background: #fff; border-bottom: 1px solid #dee2e6;
+      padding: 0 16px; flex-shrink: 0;
+    }
+    #areaTabList { margin: 0; gap: 2px; }
+    #areaTabList .nav-link {
+      color: #555; font-size: 0.88rem; padding: 7px 14px;
+      border-radius: 6px 6px 0 0; border: 1px solid transparent;
+    }
+    #areaTabList .nav-link:hover { background: #f0f4ff; color: #1565c0; }
+    #areaTabList .nav-link.active {
+      color: #1565c0; font-weight: 700;
+      border-color: #dee2e6 #dee2e6 #fff;
+      background: #fff;
+    }
+
+    /* ===== 入力ツールバー ===== */
+    #inputToolbar {
+      background: #fff; border-bottom: 2px solid #1565c0;
+      padding: 10px 16px; flex-shrink: 0;
+    }
+    #inputToolbar.d-none { display: none !important; }
+    #inputModeHeader { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    #inputModeLabel { font-weight: 700; font-size: 1rem; color: #1565c0; }
+    #exitInputModeBtn {
+      margin-left: auto; background: none; border: 1px solid #ccc;
+      border-radius: 50%; width: 26px; height: 26px; cursor: pointer;
+      font-size: 0.85rem; display: flex; align-items: center; justify-content: center;
+      color: #666;
+    }
+    #exitInputModeBtn:hover { background: #fee; color: #c00; border-color: #c00; }
+    #palette { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .palette-btn {
+      display: flex; align-items: center; gap: 5px;
+      border: 2px solid #ccc; border-radius: 20px;
+      padding: 4px 12px; cursor: pointer; background: #fff;
+      font-size: 0.85rem; transition: all 0.15s;
+    }
+    .palette-btn:hover { border-color: #888; }
+    .palette-btn.active { border-color: #1565c0; background: #e3f2fd; font-weight: 600; }
+    .palette-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    #bulkActions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+    #bulkActions button {
+      font-size: 0.8rem; padding: 3px 10px;
+      border-radius: 4px; border: 1px solid #ccc;
+      background: #fff; cursor: pointer;
+    }
+    #bulkActions button:hover { background: #f0f0f0; }
+
+    /* ===== カレンダー本体 ===== */
+    #calendarWrapper { flex: 1; overflow-y: auto; padding: 12px 16px 80px; }
+    #calendar { background: #fff; border-radius: 8px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+
+    /* ===== カレンダー内スタイル ===== */
+    .fc-bg-event { pointer-events: none !important; }
+    .fc-daygrid-day.holiday-cell { background: #fff0f0 !important; }
+    .fc-daygrid-day.no-event-day { opacity: 0.45; cursor: not-allowed !important; }
+    .fc-day-sat .fc-daygrid-day-number { color: #1565c0; }
+    .fc-day-sun .fc-daygrid-day-number { color: #c62828; }
+    .fc-day-sat { background: #f8fbff; }
+    .fc-day-sun { background: #fff8f8; }
+
+    /* ===== イベント表示 ===== */
+    .ev-wrap {
+      padding: 1px 4px;
+      font-size: 0.8rem;
+      line-height: 1.3;
+      overflow: hidden;
+    }
+    .ev-time {
+      font-size: 0.7em;
+      opacity: 0.82;
+      line-height: 1.1;
+      letter-spacing: 0.01em;
+    }
+    .ev-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      margin-right: 3px;
+      vertical-align: middle;
+    }
+    .fc-daygrid-event:has(.ev-time) { height: auto !important; }
+    .fc-daygrid-event .fc-event-main { overflow: visible; }
+    .fc-daygrid-event { white-space: normal !important; }
+
+    /* 選択済み日付 */
+    .fc-daygrid-day.selected-cell { background: rgba(21,101,192,0.15) !important; }
+    .fc-daygrid-day.selected-cell .fc-daygrid-day-number { font-weight: 700; color: #1565c0; }
+
+    /* ドラッグ中ハイライト */
+    .fc-daygrid-day.drag-highlight { background: rgba(21,101,192,0.25) !important; outline: 2px dashed #1565c0; }
+
+    /* 他社フェード */
+    .event-faded { opacity: 0.18 !important; pointer-events: none !important; }
+
+    /* プレビューイベント */
+    .fc-event.preview-event { opacity: 0.5 !important; border-style: dashed !important; }
+
+    /* 入力モード中のカーソル */
+    .input-mode-cursor .fc-daygrid-day-bg,
+    .input-mode-cursor .fc-daygrid-day-frame { cursor: pointer !important; }
+
+    /* ===== スティッキーフッター ===== */
+    #stickyFooter {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      background: #1565c0; color: #fff;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 20px; z-index: 300;
+      box-shadow: 0 -2px 8px rgba(0,0,0,0.2);
+    }
+    #stickyFooter.d-none { display: none !important; }
+    #selectedCount { font-size: 0.95rem; }
+    #bulkRegisterBtn {
+      background: #fff; color: #1565c0; border: none;
+      border-radius: 6px; padding: 6px 20px;
+      font-weight: 700; font-size: 0.95rem; cursor: pointer;
+    }
+    #bulkRegisterBtn:hover { background: #e3f2fd; }
+
+    /* ===== ローディング ===== */
+    #loadingOverlay {
+      position: fixed; inset: 0; background: rgba(255,255,255,0.7);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 9999;
+    }
+    #loadingOverlay.d-none { display: none !important; }
+
+    /* ===== 設定モーダル ===== */
+    .settings-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border-bottom: 1px solid #f0f0f0;
+    }
+    .settings-item:last-child { border-bottom: none; }
+    .settings-item .item-name { flex: 1; font-size: 0.9rem; }
+    .settings-item .item-meta { font-size: 0.78rem; color: #888; }
+    .color-preview { width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
+
+    /* ===== 権限バッジ（ユーザー管理） ===== */
+    .role-label { font-size: 0.75rem; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
+    .role-label.admin  { background: #fff9c4; color: #5d4037; border: 1px solid #fdd835; }
+    .role-label.area   { background: #e8f5e9; color: #2e7d32; border: 1px solid #66bb6a; }
+    .role-label.viewer { background: #eceff1; color: #546e7a; border: 1px solid #b0bec5; }
+
+    /* 設定モーダルの上に必ず重なるよう z-index を高く設定 */
+    #editModal, #customAlertModal, #customConfirmModal { z-index: 1090 !important; }
+
+    /* ===== モバイル ===== */
+    @media (max-width: 767px) {
+      #sidebar { display: none; }
+      #menuToggleBtn { display: inline-block !important; }
+      #calendarWrapper { padding: 8px 8px 80px; }
+      #calendar { padding: 8px; }
+      #inputToolbar { padding: 8px 10px; }
+      #palette { gap: 4px; }
+      .palette-btn { padding: 3px 8px; font-size: 0.78rem; }
+    }
+    @media (min-width: 768px) {
+      #menuToggleBtn { display: none !important; }
     }
   </style>
 </head>
 <body>
-  <div id="calendar-container" class="container">
-    <h2 class="text-center mb-4">得意先お休み管理カレンダー</h2>
-   
-    <div class="card filter-card p-3">
-        <div class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label fw-bold">キーワード検索</label>
-                <input type="text" id="searchInput" class="form-control" placeholder="例: 夏季休暇">
+
+<!-- ===== ヘッダー ===== -->
+<header id="appHeader">
+  <button id="menuToggleBtn" data-bs-toggle="offcanvas" data-bs-target="#sidebarOffcanvas" style="display:none">☰</button>
+  <h1>得意先お休み管理カレンダー</h1>
+  <div class="header-right">
+    <span id="userBadge" style="display:none"></span>
+    <button id="settingsBtn" style="display:none">⚙ 設定</button>
+  </div>
+</header>
+
+<!-- ===== メインレイアウト ===== -->
+<div id="mainLayout">
+
+  <!-- サイドバー（デスクトップ） -->
+  <aside id="sidebar">
+    <div id="sidebarHeader">
+      <div class="sidebar-title">得意先</div>
+      <div class="d-flex align-items-center gap-2">
+        <label class="d-flex align-items-center gap-1" style="font-size:0.82rem; cursor:pointer; margin:0;">
+          <input type="checkbox" id="filterAll" checked> 全表示
+        </label>
+        <button id="stopInputBtn" class="d-none" onclick="exitInputMode()">⏹ 入力中止</button>
+      </div>
+    </div>
+    <div id="clientList">
+      <div class="text-muted small p-3">読み込み中...</div>
+    </div>
+    <div id="sidebarFooter">
+      <small class="text-muted">▶入力 を押すと予定を登録できます</small>
+    </div>
+  </aside>
+
+  <!-- カレンダーエリア -->
+  <div id="calendarArea">
+
+    <!-- 備考情報バー -->
+    <div id="clientInfoBar" class="d-none">
+      <span class="info-name" id="infoBarName"></span>
+      <span class="info-rule" id="infoBarRule"></span>
+      <button class="info-close" onclick="hideInfoBar()" title="閉じる">✕</button>
+    </div>
+
+    <!-- エリアタブ -->
+    <div id="areaTabBar">
+      <ul class="nav nav-tabs" id="areaTabList">
+        <!-- JS で動的生成 -->
+      </ul>
+    </div>
+
+    <!-- 入力ツールバー -->
+    <div id="inputToolbar" class="d-none">
+      <div id="inputModeHeader">
+        <span id="inputModeLabel"></span>
+        <button id="exitInputModeBtn" title="入力モードを終了">✕</button>
+      </div>
+      <div id="palette"><!-- JS で動的生成 --></div>
+      <div id="bulkActions">
+        <button id="selectWeekendsBtn">🗓 土日を全選択</button>
+        <button id="selectHolidaysBtn">🎌 祝日を選択</button>
+        <button id="clearSelBtn">✕ 選択クリア</button>
+      </div>
+    </div>
+
+    <!-- カレンダー本体 -->
+    <div id="calendarWrapper">
+      <div id="calendar"></div>
+    </div>
+  </div>
+</div>
+
+<!-- スティッキーフッター -->
+<div id="stickyFooter" class="d-none">
+  <span id="selectedCount">0日選択中</span>
+  <button id="bulkRegisterBtn">一括登録</button>
+</div>
+
+<!-- ローディング -->
+<div id="loadingOverlay">
+  <div class="spinner-border text-primary" role="status"></div>
+</div>
+
+<!-- カスタムアラートモーダル -->
+<div class="modal fade" id="customAlertModal" tabindex="-1" style="z-index:1090">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-body py-3 px-4">
+        <p id="customAlertMsg" style="white-space:pre-line;margin:0;font-size:0.95rem;"></p>
+      </div>
+      <div class="modal-footer py-2 justify-content-center border-0">
+        <button class="btn btn-primary" id="customAlertOk" style="min-width:80px">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- カスタム確認モーダル -->
+<div class="modal fade" id="customConfirmModal" tabindex="-1" style="z-index:1090">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-body py-3 px-4">
+        <p id="customConfirmMsg" style="white-space:pre-line;margin:0;font-size:0.95rem;"></p>
+      </div>
+      <div class="modal-footer py-2 justify-content-between border-0">
+        <button class="btn btn-secondary" id="customConfirmNo" style="min-width:80px">キャンセル</button>
+        <button class="btn btn-primary"   id="customConfirmYes" style="min-width:80px">はい</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== モバイル用オフキャンバス サイドバー ===== -->
+<div class="offcanvas offcanvas-start" tabindex="-1" id="sidebarOffcanvas" style="width:300px">
+  <div class="offcanvas-header" style="background:#1565c0; color:#fff; padding:8px 16px;">
+    <h6 class="offcanvas-title mb-0">得意先</h6>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="offcanvas-body p-0">
+    <div id="sidebarOffcanvasHeader" style="padding:8px 12px; border-bottom:1px solid #dee2e6; background:#f1f3f4;">
+      <div class="d-flex align-items-center gap-2">
+        <label class="d-flex align-items-center gap-1" style="font-size:0.82rem; cursor:pointer; margin:0;">
+          <input type="checkbox" id="filterAllMobile" checked> 全表示
+        </label>
+        <button id="stopInputBtnMobile" class="d-none" style="font-size:0.72rem;padding:2px 7px;border-radius:4px;border:1px solid #e53935;color:#e53935;background:#fff;cursor:pointer;" onclick="exitInputMode()">⏹ 入力中止</button>
+      </div>
+    </div>
+    <div id="clientListMobile"></div>
+  </div>
+</div>
+
+<!-- ===== 設定モーダル ===== -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">設定</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="nav nav-tabs mb-3" id="settingsTabs">
+          <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#companyTab">会社管理</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#patternTab">パターン管理</button></li>
+          <li class="nav-item" id="userTabItem" style="display:none"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#userTab">ユーザー管理</button></li>
+          <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#areaTab">エリア管理</button></li>
+        </ul>
+
+        <div class="tab-content">
+          <!-- 会社管理タブ -->
+          <div class="tab-pane fade show active" id="companyTab">
+            <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+              <div>
+                <label class="form-label form-label-sm mb-1">会社名</label>
+                <input type="text" id="newClientName" class="form-control form-control-sm" placeholder="会社名" style="max-width:160px">
+              </div>
+              <div>
+                <label class="form-label form-label-sm mb-1">備考</label>
+                <input type="text" id="newClientMemo" class="form-control form-control-sm" placeholder="備考（任意）" style="max-width:160px">
+              </div>
+              <div>
+                <label class="form-label form-label-sm mb-1">エリア</label>
+                <select id="newClientArea" class="form-select form-select-sm" style="max-width:140px">
+                  <option value="">未設定</option>
+                </select>
+              </div>
+              <div>
+                <label class="form-label form-label-sm mb-1">色</label>
+                <input type="color" id="newClientColor" class="form-control form-control-sm form-control-color" value="#1565c0" style="width:50px">
+              </div>
+              <button class="btn btn-sm btn-primary" id="addClientBtn">追加</button>
             </div>
-            <div class="col-md-8">
-                <label class="form-label fw-bold">得意先で絞り込み</label>
-                <div id="client-filters" class="mt-1">
-                    <div class="form-check form-check-inline">
-                        <input class="form-check-input" type="checkbox" value="all" id="filter-all" checked>
-                        <label class="form-check-label" for="filter-all">すべて選択</label>
-                    </div>
-                    <span id="loading-filters" class="text-muted small ms-2">読み込み中...</span>
+            <div id="clientSettingsList" style="max-height:360px; overflow-y:auto; border:1px solid #dee2e6; border-radius:4px;">
+              <div class="text-muted small p-3">読み込み中...</div>
+            </div>
+          </div>
+
+          <!-- エリア管理タブ -->
+          <div class="tab-pane fade" id="areaTab">
+            <div class="d-flex gap-2 mb-3">
+              <input type="text" id="newAreaName" class="form-control form-control-sm" placeholder="エリア名（例: 関西）" style="max-width:200px">
+              <button class="btn btn-sm btn-primary" id="addAreaBtn">追加</button>
+            </div>
+            <div id="areaSettingsList" style="max-height:360px; overflow-y:auto; border:1px solid #dee2e6; border-radius:4px;">
+              <div class="text-muted small p-3">読み込み中...</div>
+            </div>
+          </div>
+
+          <!-- パターン管理タブ -->
+          <div class="tab-pane fade" id="patternTab">
+            <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+              <div>
+                <label class="form-label form-label-sm mb-1">パターン名</label>
+                <input type="text" id="newPatternName" class="form-control form-control-sm" placeholder="例: 午後不可" style="max-width:140px">
+              </div>
+              <div>
+                <label class="form-label form-label-sm mb-1">開始時刻</label>
+                <select id="newPatternStart" class="form-select form-select-sm" style="max-width:120px">
+                  <option value="allday">終日（休み）</option>
+                  <option value="08:00">08:00</option>
+                  <option value="09:00">09:00</option>
+                  <option value="10:00">10:00</option>
+                  <option value="11:00">11:00</option>
+                  <option value="12:00">12:00</option>
+                  <option value="13:00">13:00</option>
+                  <option value="14:00">14:00</option>
+                  <option value="15:00">15:00</option>
+                  <option value="16:00">16:00</option>
+                  <option value="17:00">17:00</option>
+                </select>
+              </div>
+              <div id="patternEndWrapper">
+                <label class="form-label form-label-sm mb-1">終了時刻</label>
+                <select id="newPatternEnd" class="form-select form-select-sm" style="max-width:120px">
+                  <option value="10:00">10:00</option>
+                  <option value="11:00">11:00</option>
+                  <option value="12:00">12:00</option>
+                  <option value="13:00">13:00</option>
+                  <option value="14:00">14:00</option>
+                  <option value="15:00" selected>15:00</option>
+                  <option value="16:00">16:00</option>
+                  <option value="17:00">17:00</option>
+                  <option value="18:00">18:00</option>
+                  <option value="19:00">19:00</option>
+                </select>
+              </div>
+              <button class="btn btn-sm btn-primary" id="addPatternBtn">追加</button>
+            </div>
+            <div id="patternSettingsList" style="max-height:360px; overflow-y:auto; border:1px solid #dee2e6; border-radius:4px;">
+              <div class="text-muted small p-3">読み込み中...</div>
+            </div>
+          </div>
+
+          <!-- ユーザー管理タブ（管理者のみ） -->
+          <div class="tab-pane fade" id="userTab">
+            <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
+              <div>
+                <label class="form-label form-label-sm mb-1">名前</label>
+                <input type="text" id="newUserName" class="form-control form-control-sm" placeholder="名前" style="max-width:140px">
+              </div>
+              <div>
+                <label class="form-label form-label-sm mb-1">メールアドレス</label>
+                <input type="email" id="newUserEmail" class="form-control form-control-sm" placeholder="xxx@example.com" style="max-width:200px">
+              </div>
+              <div class="d-flex align-items-end pb-1">
+                <label class="d-flex align-items-center gap-1" style="font-size:0.85rem; cursor:pointer; margin:0; white-space:nowrap;">
+                  <input type="checkbox" id="newUserIsAdmin"
+                    onchange="onNewAdminCheckChange(this.checked)">
+                  管理者権限
+                </label>
+              </div>
+              <button class="btn btn-sm btn-primary" id="addUserBtn">追加</button>
+            </div>
+            <!-- 表示エリア・編集エリア選択 -->
+            <div class="row g-2 mb-3 px-1" id="newUserAreaChecks">
+              <div class="col-6">
+                <div class="fw-semibold mb-1" style="font-size:0.82rem;">表示エリア</div>
+                <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
+                  <input type="radio" name="newViewMode" value="all" checked
+                    onchange="document.getElementById('newUserViewableChecks').classList.add('d-none')">全エリア
+                </label>
+                <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
+                  <input type="radio" name="newViewMode" value="select"
+                    onchange="document.getElementById('newUserViewableChecks').classList.remove('d-none')">選んで表示
+                </label>
+                <div id="newUserViewableChecks" class="d-flex flex-wrap gap-2 ps-2 d-none"></div>
+              </div>
+              <div class="col-6">
+                <div class="fw-semibold mb-1" style="font-size:0.82rem;">編集エリア</div>
+                <div id="newUserEditContent">
+                  <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
+                    <input type="radio" name="newEditMode" value="none" checked
+                      onchange="document.getElementById('newUserEditableChecks').classList.add('d-none')">編集不可
+                  </label>
+                  <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
+                    <input type="radio" name="newEditMode" value="select"
+                      onchange="document.getElementById('newUserEditableChecks').classList.remove('d-none')">選んで編集可
+                  </label>
+                  <div id="newUserEditableChecks" class="d-flex flex-wrap gap-2 ps-2 d-none"></div>
                 </div>
+              </div>
             </div>
-        </div>
-        <!-- ★追加: 絞り込み時に表示するルールエリア -->
-        <div id="filter-rule-display" class="rule-box mt-3"></div>
+            <div id="userSettingsList" style="max-height:360px; overflow-y:auto; border:1px solid #dee2e6; border-radius:4px;">
+              <div class="text-muted small p-3">読み込み中...</div>
+            </div>
+          </div>
+        </div><!-- tab-content -->
+      </div><!-- modal-body -->
     </div>
-
-    <div id='calendar'></div>
   </div>
+</div>
 
-  <div class="spinner-border text-primary loading-spinner d-none" role="status"></div>
-
-  <!-- 操作選択モーダル -->
-  <div class="modal fade" id="actionModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content text-center py-4">
-        <h5 class="modal-title mb-3" id="actionModalTitle"></h5>
-        
-        <!-- ★追加: ここにルールを表示 -->
-        <div id="action-rule-display" class="rule-box mx-4 mb-3 text-start"></div>
-        
-        <p class="lead">この予定をどうしますか？</p>
-        <div>
-          <button type="button" id="editActionBtn" class="btn btn-primary btn-lg mx-2">編集</button>
-          <button type="button" id="deleteActionBtn" class="btn btn-danger btn-lg mx-2">削除</button>
-        </div>
+<!-- ===== インライン編集用モーダル ===== -->
+<div class="modal fade" id="editModal" tabindex="-1" style="z-index:1090">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="editModalTitle">編集</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="editModalBody"></div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+        <button class="btn btn-sm btn-primary" id="editModalSaveBtn">保存</button>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- 予定追加/編集モーダル -->
-  <div class="modal fade" id="eventModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="eventModalLabel">予定の編集</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <input type="hidden" id="eventId">
-          
-          <!-- ★追加: 編集時にもルールを表示 -->
-          <div id="modal-rule-display" class="rule-box mb-3"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// =====================================================================
+// 状態変数
+// =====================================================================
+let calendar;
+let rawEvents      = [];           // GASから取得した全イベント
+let holidayDates   = new Set();    // 祝日日付 Set<'YYYY-MM-DD'>
+let clients        = [];           // 会社マスター [{id,name,memo,areaId,color}]
+let areas          = [];           // エリアマスター [{id,name}]
+let users          = [];           // ユーザーマスター [{id,name,email,areaId,role}]
+let currentUser    = null;         // 現在のユーザー情報
+let activeAreaId   = '__all__';    // 選択中のエリアID（'__all__' = 全て）
+let clientRules    = {};           // {name: ルール文字列}
+let patterns       = [];           // 入力パターン [{id,name,startTime,endTime,color,order}]
+let checkedClients = new Set();    // 表示フィルターでチェック済みの会社名
+let inputModeClient = null;            // 入力モード中の会社名（null=通常モード）
+let selectionsByPattern = new Map();   // Map<patternId, Set<dateStr>>
+let preInputFilters = null;            // 入力モード前のフィルター状態
 
-          <div class="mb-3">
-            <label class="form-label">得意先名</label>
-            <input type="text" class="form-control" id="clientName" placeholder="株式会社〇〇" list="client-list">
-            <!-- 補完用リスト -->
-            <datalist id="client-list"></datalist>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">内容（必須）</label>
-            <input type="text" class="form-control" id="eventTitle" required placeholder="夏季休暇など">
-          </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">開始日</label>
-              <input type="date" class="form-control" id="eventStartDate">
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">終了日</label>
-              <input type="date" class="form-control" id="eventEndDate">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-          <button type="button" id="saveButton" class="btn btn-primary">保存</button>
-        </div>
-      </div>
-    </div>
-  </div>
+// ドラッグ選択用
+let isDragging    = false;
+let wasDragging   = false;
+let pointerDownDate = null;
+let draggedDates  = new Set();
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+// Bootstrap モーダルインスタンス
+let settingsModal, editModalBS, customAlertModal, customConfirmModal;
 
-  <script>
-    let calendar;
-    let rawEvents = []; 
-    let holidayDates = new Set();
-    let clientRules = {}; // ★追加: 会社ごとのルールを保持するオブジェクト
-    let selectedEvent = null;
-    const eventModal = new bootstrap.Modal(document.getElementById('eventModal'));
-    const actionModal = new bootstrap.Modal(document.getElementById('actionModal'));
+// =====================================================================
+// ユーティリティ
+// =====================================================================
+function showLoading(v) { document.getElementById('loadingOverlay').classList.toggle('d-none', !v); }
 
-    function showLoading(show) {
-      document.querySelector('.loading-spinner').classList.toggle('d-none', !show);
-    }
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
-    // ルールを表示するヘルパー関数
-    function displayRule(elementId, clientName) {
-      const el = document.getElementById(elementId);
-      if (!el) return;
-      
-      const rule = clientRules[clientName];
-      if (rule) {
-        el.innerHTML = `<strong>【${clientName}のルール】</strong><br>${rule}`;
-        el.style.display = 'block';
-      } else {
-        el.style.display = 'none';
-        el.innerHTML = '';
-      }
-    }
+function toDateStr(date) {
+  const off = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - off).toISOString().split('T')[0];
+}
 
-    function updateClientFilters(events) {
-        const container = document.getElementById('client-filters');
-        const loadingMsg = document.getElementById('loading-filters');
-        if (loadingMsg) loadingMsg.remove();
-        
-        const existing = container.querySelectorAll('.client-checkbox-item');
-        existing.forEach(function(el) { el.remove(); });
+// =====================================================================
+// 権限チェック
+// =====================================================================
+function isAdmin() { return !!(currentUser && currentUser.isAdmin); }
 
-        const clientSet = new Set();
-        // 入力補完用のリストも更新
-        const dataList = document.getElementById('client-list');
-        dataList.innerHTML = '';
+/** カンマ区切り文字列をIDの配列に変換（空文字は空配列） */
+function parseIdList(str) {
+  if (!str) return [];
+  return str.split(',').map(s => s.trim()).filter(Boolean);
+}
 
-        events.forEach(function(e) {
-            const props = e.extendedProps || {};
-            if (!props.isHoliday && props.clientName && props.clientName.trim() !== "") {
-                clientSet.add(props.clientName);
-            }
-        });
+/** 指定会社への入力権限 */
+function canEdit(clientName) {
+  if (!currentUser) return false;
+  if (currentUser.isAdmin) return true; // 管理者は全エリア編集可
+  const editList = parseIdList(currentUser.editableAreas);
+  if (editList.length === 0) return false;
+  const client = clients.find(c => c.name === clientName);
+  if (!client || !client.areaId) return false;
+  return editList.includes(client.areaId);
+}
 
-        // Rulesシートにあって、まだイベントがない会社もリストに加える（任意）
-        Object.keys(clientRules).forEach(name => clientSet.add(name));
+/** 設定モーダルを開く権限（管理者 or 編集エリアが1つ以上設定されているユーザー） */
+function canOpenSettings() {
+  if (!currentUser) return false;
+  if (currentUser.isAdmin) return true;
+  return parseIdList(currentUser.editableAreas).length > 0;
+}
 
-        const clientNames = Array.from(clientSet).sort();
-        
-        clientNames.forEach(function(name) {
-            // フィルタ用チェックボックス
-            const div = document.createElement('div');
-            div.className = 'form-check form-check-inline client-checkbox-item';
-            div.innerHTML = `
-                <input class="form-check-input client-checkbox" type="checkbox" value="${name}" id="filter-${name}" checked>
-                <label class="form-check-label" for="filter-${name}">${name}</label>
-            `;
-            container.appendChild(div);
+// =====================================================================
+// selectionsByPattern ヘルパー
+// =====================================================================
+function getAllSelectedDates() {
+  const all = new Set();
+  selectionsByPattern.forEach(set => set.forEach(d => all.add(d)));
+  return all;
+}
 
-            // 入力補完用オプション
-            const option = document.createElement('option');
-            option.value = name;
-            dataList.appendChild(option);
-        });
+function getTotalSelectedCount() {
+  let n = 0;
+  selectionsByPattern.forEach(set => { n += set.size; });
+  return n;
+}
 
-        if (clientNames.length === 0) {
-            const msg = document.createElement('span');
-            msg.className = 'text-muted ms-2 small client-checkbox-item';
-            msg.textContent = 'データなし';
-            container.appendChild(msg);
-        }
+function addToSelection(patId, dateStr) {
+  selectionsByPattern.forEach((set, pid) => { if (pid !== patId) set.delete(dateStr); });
+  if (!selectionsByPattern.has(patId)) selectionsByPattern.set(patId, new Set());
+  selectionsByPattern.get(patId).add(dateStr);
+}
 
-        const checkboxes = document.querySelectorAll('.client-checkbox');
-        checkboxes.forEach(function(cb) {
-            cb.addEventListener('change', function() {
-                const allCheckboxes = Array.from(document.querySelectorAll('.client-checkbox'));
-                const isAllChecked = allCheckboxes.every(function(c) { return c.checked; });
-                document.getElementById('filter-all').checked = isAllChecked;
-                calendar.refetchEvents();
-            });
-        });
-    }
+function removeFromAllPatterns(dateStr) {
+  selectionsByPattern.forEach(set => set.delete(dateStr));
+}
 
-    function getFilteredEvents() {
-        const searchInput = document.getElementById('searchInput');
-        const searchText = searchInput ? searchInput.value.toLowerCase().trim() : '';
-        const allChecked = document.getElementById('filter-all').checked;
-        const checkedBoxes = document.querySelectorAll('.client-checkbox:checked');
-        const selectedClients = Array.from(checkedBoxes).map(function(cb) { return cb.value; });
+function toDateStrFromAny(v) {
+  if (!v) return '';
+  return String(v).substring(0, 10);
+}
 
-        // ★追加: フィルタリング時に、もし「1社だけ」に絞られていたら、そのルールをトップに表示
-        const ruleDisplay = document.getElementById('filter-rule-display');
-        if (selectedClients.length === 1 && !allChecked) {
-            displayRule('filter-rule-display', selectedClients[0]);
-        } else {
-            ruleDisplay.style.display = 'none';
-        }
+function formatDateDisplay(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const days = ['日','月','火','水','木','金','土'];
+  return `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]})`;
+}
 
-        return rawEvents.filter(function(event) {
-            const props = event.extendedProps || {};
-            if (props.isHoliday) return true;
-            
-            const title = event.title || "";
-            const clientName = props.clientName || "";
-            const titleMatch = title.toLowerCase().indexOf(searchText) !== -1;
-            const clientNameMatch = clientName.toLowerCase().indexOf(searchText) !== -1;
-            
-            let clientFilterMatch = true;
-            if (!allChecked) {
-                clientFilterMatch = selectedClients.indexOf(clientName) !== -1;
-            }
-            return (titleMatch || clientNameMatch) && clientFilterMatch;
-        });
-    }
+// =====================================================================
+// 初期化
+// =====================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  settingsModal      = new bootstrap.Modal(document.getElementById('settingsModal'));
+  editModalBS        = new bootstrap.Modal(document.getElementById('editModal'));
+  customAlertModal   = new bootstrap.Modal(document.getElementById('customAlertModal'));
+  customConfirmModal = new bootstrap.Modal(document.getElementById('customConfirmModal'));
 
-    function extractHolidays(events) {
-        holidayDates.clear();
-        events.forEach(function(e) {
-            if (e.extendedProps && e.extendedProps.isHoliday) {
-                holidayDates.add(e.start);
-            }
-        });
-    }
+  // 設定モーダルの上に重なるモーダルのバックドロップを前面に出す
+  ['editModal','customAlertModal','customConfirmModal'].forEach(id => {
+    document.getElementById(id).addEventListener('show.bs.modal', () => {
+      setTimeout(() => {
+        const bds = document.querySelectorAll('.modal-backdrop');
+        if (bds.length > 0) bds[bds.length - 1].style.zIndex = '1089';
+      }, 0);
+    });
+  });
 
-    // ★ ルールデータの取得
-    function fetchRules() {
+  initCalendar();
+
+  document.getElementById('settingsBtn').addEventListener('click', openSettings);
+  document.getElementById('exitInputModeBtn').addEventListener('click', exitInputMode);
+  document.getElementById('bulkRegisterBtn').addEventListener('click', bulkRegister);
+
+  document.getElementById('selectWeekendsBtn').addEventListener('click', selectAllWeekends);
+  document.getElementById('selectHolidaysBtn').addEventListener('click', selectHolidays);
+  document.getElementById('clearSelBtn').addEventListener('click', clearSelection);
+
+  document.getElementById('filterAll').addEventListener('change', e => {
+    const checked = e.target.checked;
+    // 現在のエリアタブに対応した会社のみ対象
+    getVisibleClients().forEach(c => {
+      if (checked) checkedClients.add(c.name);
+      else         checkedClients.delete(c.name);
+    });
+    document.getElementById('filterAllMobile').checked = checked;
+    renderSidebar();
+    calendar.refetchEvents();
+  });
+  document.getElementById('filterAllMobile').addEventListener('change', e => {
+    document.getElementById('filterAll').checked = e.target.checked;
+    document.getElementById('filterAll').dispatchEvent(new Event('change'));
+  });
+
+  document.getElementById('newPatternStart').addEventListener('change', function() {
+    document.getElementById('patternEndWrapper').style.display = this.value === 'allday' ? 'none' : '';
+  });
+
+  document.getElementById('settingsModal').addEventListener('shown.bs.modal', () => {
+    refreshSettingsAreaSelects();
+    renderClientSettings();
+    renderAreaSettings();
+    renderPatternSettings();
+    if (currentUser && currentUser.isAdmin) {
+      // ユーザー一覧をGASから最新取得して表示
       google.script.run
-        .withSuccessHandler(function(rules) {
-          clientRules = rules || {};
-          // ルール取得後にフィルタ更新（ルールにある会社も補完リストに入れるため）
-          updateClientFilters(rawEvents);
-        })
-        .withFailureHandler(function(err) {
-          console.error('ルール取得失敗', err);
-        })
-        .getClientRules();
+        .withSuccessHandler(data => { users = data || []; renderUserSettings(); })
+        .withFailureHandler(handleError)
+        .getUsers();
     }
+  });
 
-    document.addEventListener('DOMContentLoaded', function() {
-      const calendarEl = document.getElementById('calendar');
+  document.getElementById('addClientBtn').addEventListener('click', handleAddClient);
+  document.getElementById('addAreaBtn').addEventListener('click', handleAddArea);
+  document.getElementById('addPatternBtn').addEventListener('click', handleAddPattern);
+  document.getElementById('addUserBtn').addEventListener('click', handleAddUser);
 
-      document.getElementById('filter-all').addEventListener('change', function() {
-          const isChecked = this.checked;
-          document.querySelectorAll('.client-checkbox').forEach(function(cb) { cb.checked = isChecked; });
-          calendar.refetchEvents();
-      });
+  document.getElementById('palette').addEventListener('change', () => {
+    if (rawEvents.length > 0) calendar.refetchEvents();
+  });
 
-      document.getElementById('searchInput').addEventListener('input', function() { calendar.refetchEvents(); });
-      
-      // 得意先名入力時にルールを表示（新規登録時などに便利）
-      document.getElementById('clientName').addEventListener('input', function() {
-          displayRule('modal-rule-display', this.value);
-      });
+  loadAllData();
+});
 
-      calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        locale: 'ja',
-        buttonText: { today: '今日', month: '月', week: '週', day: '日', list: 'リスト' },
-        headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' },
-        dayCellContent: function(e) { e.dayNumberText = e.dayNumberText.replace('日', ''); return e.dayNumberText; },
-        dayCellClassNames: function(arg) {
-            const offset = arg.date.getTimezoneOffset() * 60000;
-            const dateStr = new Date(arg.date.getTime() - offset).toISOString().split('T')[0];
-            if (holidayDates.has(dateStr)) return ['holiday-cell'];
-            return [];
-        },
-        height: 'auto',
-        selectable: true,
-        editable: true,
-        
-        events: function(fetchInfo, successCallback, failureCallback) {
-          if (rawEvents.length === 0) {
-              showLoading(true);
-              // まずルールを取得
-              fetchRules();
-              
-              google.script.run
-                .withSuccessHandler(function(events) {
-                  rawEvents = events || [];
-                  extractHolidays(rawEvents);
-                  updateClientFilters(rawEvents);
-                  successCallback(getFilteredEvents());
-                  showLoading(false);
-                  calendar.render(); 
-                })
-                .withFailureHandler(function(error) {
-                  alert('データの読み込みに失敗しました: ' + error.message);
-                  failureCallback(error);
-                  showLoading(false);
-                })
-                .getHolidays();
-          } else {
-              successCallback(getFilteredEvents());
-          }
-        },
-
-        eventContent: function(arg) {
-            const props = arg.event.extendedProps || {};
-            if (props.isHoliday) {
-                return { html: '<div class="p-1 text-danger small holiday-event">' + arg.event.title + '</div>' };
-            }
-            const client = props.clientName || '未設定';
-            const html = '<div class="p-1"><strong>' + client + '</strong>: ' + arg.event.title + '</div>';
-            return { html: html };
-        },
-
-        select: function(info) {
-          document.getElementById('eventId').value = '';
-          document.getElementById('clientName').value = '';
-          document.getElementById('eventTitle').value = '';
-          document.getElementById('modal-rule-display').style.display = 'none'; // ルール表示クリア
-          
-          document.getElementById('eventStartDate').value = info.startStr;
-          let end = new Date(info.endStr);
-          end.setDate(end.getDate() - 1);
-          const y = end.getFullYear();
-          const m = ('0' + (end.getMonth() + 1)).slice(-2);
-          const d = ('0' + end.getDate()).slice(-2);
-          document.getElementById('eventEndDate').value = y + '-' + m + '-' + d;
-          document.getElementById('eventModalLabel').innerText = '予定の追加';
-          eventModal.show();
-        },
-
-        eventClick: function(info) {
-          const props = info.event.extendedProps || {};
-          if (props.isHoliday) return;
-          selectedEvent = info.event;
-          
-          // ★ 追加: タイトルに会社名を表示
-          const clientName = props.clientName || '未設定';
-          document.getElementById('actionModalTitle').innerText = clientName + ' の予定';
-          
-          // ★ 追加: ここでルールを表示
-          displayRule('action-rule-display', clientName);
-
-          actionModal.show();
-        },
-
-        eventDrop: function(info) {
-          const props = info.event.extendedProps || {};
-          if (props.isHoliday) {
-             info.revert();
-             return;
-          }
-          if (!confirm("日付を変更しますか？")) {
-            info.revert();
-            return;
-          }
-          showLoading(true);
-          const eventData = {
-            id: info.event.id,
-            title: info.event.title,
-            start: info.event.startStr,
-            end: info.event.endStr,
-            extendedProps: { clientName: props.clientName }
-          };
+// =====================================================================
+// データ取得（チェーン）
+// =====================================================================
+function loadAllData() {
+  showLoading(true);
+  // まず現在のユーザー情報を取得
+  google.script.run
+    .withSuccessHandler(userInfo => {
+      currentUser = userInfo;
+      applyUserUI();
+      // 次にエリアを取得
+      google.script.run
+        .withSuccessHandler(areaData => {
+          areas = areaData || [];
+          renderAreaTabs();
+          // 次にクライアントを取得
           google.script.run
-            .withSuccessHandler(function() {
-                rawEvents = [];
-                calendar.refetchEvents();
+            .withSuccessHandler(clientData => {
+              clients = clientData || [];
+              checkedClients = new Set(clients.map(c => c.name));
+              google.script.run
+                .withSuccessHandler(data => {
+                  patterns = data || [];
+                  if (patterns.length === 0) {
+                    google.script.run
+                      .withSuccessHandler(result => {
+                        patterns = (result && result.patterns) || [];
+                        continueLoading();
+                      })
+                      .withFailureHandler(handleError)
+                      .initDefaultPatterns();
+                  } else {
+                    continueLoading();
+                  }
+                })
+                .withFailureHandler(handleError)
+                .getPatterns();
             })
-            .withFailureHandler(function(error) {
-              alert('更新に失敗しました: ' + error.message);
-              info.revert();
-              showLoading(false);
-            })
-            .updateHoliday(eventData);
-        }
-      });
-      calendar.render();
-    });
-
-    document.getElementById('editActionBtn').addEventListener('click', function() {
-      actionModal.hide();
-      if (!selectedEvent) return;
-      const props = selectedEvent.extendedProps || {};
-      const clientName = props.clientName || '';
-      
-      document.getElementById('eventId').value = selectedEvent.id;
-      document.getElementById('clientName').value = clientName;
-      document.getElementById('eventTitle').value = selectedEvent.title;
-      document.getElementById('eventStartDate').value = selectedEvent.startStr;
-      
-      // 編集時もルールを表示
-      displayRule('modal-rule-display', clientName);
-      
-      let end = selectedEvent.end ? new Date(selectedEvent.end) : new Date(selectedEvent.start);
-      if (selectedEvent.end) end.setDate(end.getDate() - 1);
-      
-      const y = end.getFullYear();
-      const m = ('0' + (end.getMonth() + 1)).slice(-2);
-      const d = ('0' + end.getDate()).slice(-2);
-      document.getElementById('eventEndDate').value = y + '-' + m + '-' + d;
-      
-      document.getElementById('eventModalLabel').innerText = '予定の編集';
-      eventModal.show();
-    });
-
-    document.getElementById('deleteActionBtn').addEventListener('click', function() {
-      actionModal.hide();
-      if (!selectedEvent) return;
-      if (!confirm('本当にこの予定を削除しますか？')) return;
-      
-      showLoading(true);
+            .withFailureHandler(handleError)
+            .getClients();
+        })
+        .withFailureHandler(handleError)
+        .getAreas();
+    })
+    .withFailureHandler(err => {
+      // ユーザー情報取得失敗はviewerとして続行
+      currentUser = { id: '', name: '', email: '', areaId: '', role: 'viewer' };
+      applyUserUI();
       google.script.run
-        .withSuccessHandler(function() {
-          rawEvents = [];
-          calendar.refetchEvents();
+        .withSuccessHandler(areaData => {
+          areas = areaData || [];
+          renderAreaTabs();
+          google.script.run
+            .withSuccessHandler(clientData => {
+              clients = clientData || [];
+              checkedClients = new Set(clients.map(c => c.name));
+              google.script.run
+                .withSuccessHandler(data => {
+                  patterns = data || [];
+                  continueLoading();
+                })
+                .withFailureHandler(handleError)
+                .getPatterns();
+            })
+            .withFailureHandler(handleError)
+            .getClients();
         })
-        .withFailureHandler(function(error) {
-            alert('削除失敗: ' + error.message);
-            showLoading(false);
-        })
-        .deleteHoliday(selectedEvent.id);
+        .withFailureHandler(handleError)
+        .getAreas();
+    })
+    .getCurrentUserInfo();
+}
+
+function continueLoading() {
+  clientRules = {};
+  clients.forEach(c => { if (c.memo && c.memo.trim()) clientRules[c.name] = c.memo.trim(); });
+
+  google.script.run
+    .withSuccessHandler(data => {
+      rawEvents = data || [];
+      extractHolidays(rawEvents);
+      buildPalette();
+      renderSidebar();
+      calendar.refetchEvents();
+      showLoading(false);
+    })
+    .withFailureHandler(handleError)
+    .getHolidays();
+}
+
+/** ユーザー情報に応じてUIを切り替え */
+function applyUserUI() {
+  if (!currentUser) return;
+  // ユーザー名のみ表示（管理者の場合は括弧付き）
+  const badge = document.getElementById('userBadge');
+  const displayName = currentUser.name || currentUser.email;
+  if (displayName) {
+    badge.textContent = currentUser.isAdmin ? displayName + '（管理者）' : displayName;
+    badge.style.display = '';
+  }
+  // 設定ボタン（管理者 or 編集エリアが設定されているユーザー）
+  document.getElementById('settingsBtn').style.display = canOpenSettings() ? '' : 'none';
+  // ユーザー管理タブ（管理者のみ）
+  document.getElementById('userTabItem').style.display = currentUser.isAdmin ? '' : 'none';
+}
+
+// =====================================================================
+// 備考情報バー
+// =====================================================================
+function showInfoBar(clientName) {
+  const rule = clientRules[clientName];
+  if (!rule) { hideInfoBar(); return; }
+  document.getElementById('infoBarName').textContent = clientName + '：';
+  document.getElementById('infoBarRule').textContent = rule;
+  document.getElementById('clientInfoBar').classList.remove('d-none');
+}
+
+function hideInfoBar() {
+  document.getElementById('clientInfoBar').classList.add('d-none');
+}
+
+function showAlert(msg, onOk) {
+  document.getElementById('customAlertMsg').textContent = msg;
+  document.getElementById('customAlertOk').onclick = () => {
+    customAlertModal.hide();
+    if (onOk) onOk();
+  };
+  customAlertModal.show();
+}
+function showConfirm(msg, onYes) {
+  document.getElementById('customConfirmMsg').textContent = msg;
+  document.getElementById('customConfirmYes').onclick = () => { customConfirmModal.hide(); onYes(); };
+  document.getElementById('customConfirmNo').onclick  = () => customConfirmModal.hide();
+  customConfirmModal.show();
+}
+
+function handleError(err) {
+  showLoading(false);
+  console.error('GASエラー:', err);
+  showAlert('エラーが発生しました: ' + (err.message || JSON.stringify(err)));
+}
+
+function reloadEvents() {
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(data => {
+      rawEvents = data || [];
+      extractHolidays(rawEvents);
+      calendar.refetchEvents();
+      showLoading(false);
+    })
+    .withFailureHandler(handleError)
+    .getHolidays();
+}
+
+function extractHolidays(events) {
+  holidayDates.clear();
+  events.forEach(e => {
+    if (e.extendedProps && e.extendedProps.isHoliday) {
+      holidayDates.add(toDateStrFromAny(e.start));
+    }
+  });
+}
+
+// =====================================================================
+// エリアタブ
+// =====================================================================
+/** 現在のユーザーが閲覧できるエリア一覧 */
+function getViewableAreas() {
+  if (!currentUser || currentUser.role === 'admin') return areas;
+  const viewList = parseIdList(currentUser.viewableAreas);
+  if (viewList.length === 0) return areas; // 空 = 全エリア表示
+  return areas.filter(a => viewList.includes(a.id));
+}
+
+function renderAreaTabs() {
+  const tabList = document.getElementById('areaTabList');
+  tabList.innerHTML = '';
+
+  const viewable = getViewableAreas();
+  // 「全て」タブ: viewableAreas が空（全エリア表示可）のときのみ表示
+  const viewList = parseIdList(currentUser ? currentUser.viewableAreas : '');
+  const showAll = !currentUser || currentUser.role === 'admin' || viewList.length === 0;
+
+  if (showAll) {
+    const allLi = document.createElement('li');
+    allLi.className = 'nav-item';
+    const allBtn = document.createElement('button');
+    allBtn.className = 'nav-link' + (activeAreaId === '__all__' ? ' active' : '');
+    allBtn.textContent = '全て';
+    allBtn.addEventListener('click', () => selectArea('__all__'));
+    allLi.appendChild(allBtn);
+    tabList.appendChild(allLi);
+  }
+
+  viewable.forEach(area => {
+    const li = document.createElement('li');
+    li.className = 'nav-item';
+    const btn = document.createElement('button');
+    btn.className = 'nav-link' + (activeAreaId === area.id ? ' active' : '');
+    btn.textContent = area.name;
+    btn.addEventListener('click', () => selectArea(area.id));
+    li.appendChild(btn);
+    tabList.appendChild(li);
+  });
+
+  // アクティブタブが表示できないエリアになっていたら修正
+  if (activeAreaId === '__all__' && !showAll) {
+    activeAreaId = currentUser.areaId || (viewable[0] ? viewable[0].id : '__all__');
+    // タブを再描画
+    tabList.querySelectorAll('.nav-link').forEach(btn => {
+      btn.classList.toggle('active', btn.textContent === (areas.find(a => a.id === activeAreaId) || {}).name);
+    });
+  }
+}
+
+function selectArea(areaId) {
+  if (inputModeClient) {
+    showConfirm('入力モード中です。エリアを切り替えると入力が中止されます。よろしいですか？', () => {
+      exitInputMode();
+      _doSelectArea(areaId);
+    });
+    return;
+  }
+  _doSelectArea(areaId);
+}
+
+function _doSelectArea(areaId) {
+  activeAreaId = areaId;
+  // タブ切り替え時はそのエリアの会社のみチェックONにリセット
+  checkedClients = new Set(getVisibleClients().map(c => c.name));
+  renderAreaTabs();
+  renderSidebar();
+  calendar.refetchEvents();
+}
+
+/** 現在のユーザーが閲覧できる会社一覧（エリア制限 + タブ絞り込み） */
+function getVisibleClients() {
+  let base = clients;
+  // viewableAreas が設定されていれば表示エリアを絞り込む
+  if (currentUser && currentUser.role !== 'admin') {
+    const viewList = parseIdList(currentUser.viewableAreas);
+    if (viewList.length > 0) {
+      base = clients.filter(c => viewList.includes(c.areaId));
+    }
+  }
+  if (activeAreaId === '__all__') return base;
+  return base.filter(c => c.areaId === activeAreaId);
+}
+
+// =====================================================================
+// FullCalendar 初期化
+// =====================================================================
+function initCalendar() {
+  const calEl = document.getElementById('calendar');
+
+  calendar = new FullCalendar.Calendar(calEl, {
+    initialView: 'dayGridMonth',
+    locale: 'ja',
+    buttonText: { today: '今日', month: '月', week: '週', list: 'リスト' },
+    headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listWeek' },
+    height: 'auto',
+    selectable: false,
+    editable: false,
+    displayEventTime: false,
+    eventDisplay: 'block',  // 時刻付きイベントもバー表示にして得意先カラーを適用
+
+    dayCellContent: e => e.dayNumberText.replace('日', ''),
+
+    dayCellClassNames: arg => {
+      const dateStr = toDateStr(arg.date);
+      const cls = [];
+      if (holidayDates.has(dateStr)) cls.push('holiday-cell');
+      if (inputModeClient) cls.push('input-mode-cursor');
+      if (inputModeClient && getAllSelectedDates().has(dateStr)) cls.push('selected-cell');
+      if (draggedDates.has(dateStr)) cls.push('drag-highlight');
+      if (inputModeClient && getSelectedPatternId() === '__delete__') {
+        const hasEvent = rawEvents.some(ev => {
+          const p = ev.extendedProps || {};
+          return !p.isHoliday && p.clientName === inputModeClient && toDateStrFromAny(ev.start) === dateStr;
+        });
+        if (!hasEvent) cls.push('no-event-day');
+      }
+      return cls;
+    },
+
+    events: (fetchInfo, successCallback) => {
+      successCallback([...getFilteredEvents(), ...buildPreviewEvents()]);
+    },
+
+    eventContent: arg => {
+      const props = arg.event.extendedProps || {};
+      if (props.isHoliday) {
+        return { html: `<div class="ev-wrap text-danger" style="pointer-events:none">${escHtml(arg.event.title)}</div>` };
+      }
+
+      const fmtTime = d => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+      let timeRow = '';
+      if (!arg.event.allDay && arg.event.start && arg.event.end) {
+        timeRow = `<div class="ev-time">${fmtTime(arg.event.start)}〜${fmtTime(arg.event.end)}</div>`;
+      }
+
+      if (props.isPreview) {
+        const client = clients.find(c => c.name === inputModeClient) || {};
+        const clientColor = (client.color && client.color !== '') ? client.color : '#1565c0';
+        return { html: `<div class="ev-wrap">▸${escHtml(arg.event.title)}${timeRow}</div>` };
+      }
+
+      // 通常イベント: 会社名（色はイベントのbackgroundColor=会社色）+ パターン名テキスト
+      const patternName = escHtml(arg.event.title);
+      return { html: `<div class="ev-wrap"><strong>${escHtml(props.clientName || '未設定')}</strong>: ${patternName}${timeRow}</div>` };
+    },
+
+    eventClassNames: arg => {
+      const props = arg.event.extendedProps || {};
+      if (props.isHoliday || props.isPreview) return [];
+      if (inputModeClient && props.clientName !== inputModeClient) return ['event-faded'];
+      return [];
+    },
+
+    dateClick: info => {
+      if (!inputModeClient) return;
+      if (wasDragging) { wasDragging = false; return; }
+      toggleDateSelection(info.dateStr);
+    },
+
+    eventClick: info => {
+      const props = info.event.extendedProps || {};
+      if (props.isHoliday) return;
+
+      if (!inputModeClient) {
+        // 通常モード: イベントクリックで備考をカレンダー上部に表示
+        if (props.clientName) showInfoBar(props.clientName);
+        return;
+      }
+      // 入力モード: 日付選択として扱う
+      info.jsEvent.preventDefault();
+      info.jsEvent.stopPropagation();
+      const dateStr = info.event.startStr.substring(0, 10);
+      if (wasDragging) { wasDragging = false; return; }
+      toggleDateSelection(dateStr);
+    },
+
+    eventsSet: () => { setTimeout(updateSelectedCells, 0); }
+  });
+
+  calendar.render();
+  setupDragSelection(calEl);
+}
+
+// =====================================================================
+// イベントフィルタリング
+// =====================================================================
+function getFilteredEvents() {
+  // 入力モード・通常モード共通: checkedClients でフィルタリング
+  // （入力モード中もエリア外のイベントは表示しない）
+  return rawEvents.filter(ev => {
+    if (ev.extendedProps && ev.extendedProps.isHoliday) return true;
+    return checkedClients.has((ev.extendedProps || {}).clientName || '');
+  });
+}
+
+// =====================================================================
+// プレビューイベント生成
+// =====================================================================
+function buildPreviewEvents() {
+  if (!inputModeClient || getTotalSelectedCount() === 0) return [];
+  const previews = [];
+
+  // 入力中の会社の色を使用
+  const clientObj = clients.find(c => c.name === inputModeClient) || {};
+  const clientColor = (clientObj.color && clientObj.color !== '') ? clientObj.color : '#1565c0';
+
+  selectionsByPattern.forEach((dateSet, patId) => {
+    if (patId === '__delete__' || dateSet.size === 0) return;
+    const pattern = patterns.find(p => p.id === patId);
+    if (!pattern) return;
+
+    dateSet.forEach(dateStr => {
+      let start, end;
+      if (pattern.startTime === 'allday') {
+        start = dateStr;
+        const [y, m, day] = dateStr.split('-').map(Number);
+        const next = new Date(y, m - 1, day + 1);
+        end = localDateStr(next.getFullYear(), next.getMonth(), next.getDate());
+      } else {
+        start = dateStr + 'T' + pattern.startTime + ':00';
+        end   = dateStr + 'T' + (pattern.endTime || '18:00') + ':00';
+      }
+      previews.push({
+        id:              'preview_' + patId + '_' + dateStr,
+        title:           pattern.name,
+        start, end,
+        backgroundColor: clientColor,
+        borderColor:     clientColor,
+        classNames:      ['preview-event'],
+        extendedProps:   { isPreview: true, patternId: patId, clientName: inputModeClient }
+      });
+    });
+  });
+  return previews;
+}
+
+function getSelectedPatternId() {
+  const el = document.querySelector('input[name="palette"]:checked');
+  return el ? el.value : null;
+}
+
+// =====================================================================
+// パレット（動的生成）
+// =====================================================================
+function buildPalette() {
+  const container = document.getElementById('palette');
+  container.innerHTML = '';
+
+  // 入力中の得意先カラーを取得してドットに使用
+  function getPaletteClientColor() {
+    if (!inputModeClient) return '#6c757d';
+    const c = clients.find(x => x.name === inputModeClient);
+    return (c && c.color && c.color !== '') ? c.color : '#6c757d';
+  }
+
+  patterns.forEach((p, idx) => {
+    const label = document.createElement('label');
+    label.className = 'palette-btn' + (idx === 0 ? ' active' : '');
+    const dotColor = getPaletteClientColor();
+    label.innerHTML = `
+      <input type="radio" name="palette" value="${escHtml(p.id)}" ${idx === 0 ? 'checked' : ''} style="display:none">
+      <span class="palette-color-dot" style="background:${escHtml(dotColor)}"></span>
+      ${escHtml(p.name)}
+    `;
+    label.addEventListener('click', () => {
+      document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
+      label.classList.add('active');
+      if (rawEvents.length > 0) calendar.refetchEvents();
+    });
+    container.appendChild(label);
+  });
+
+  const delLabel = document.createElement('label');
+  delLabel.className = 'palette-btn';
+  delLabel.innerHTML = `
+    <input type="radio" name="palette" value="__delete__" style="display:none">
+    <span class="palette-color-dot" style="background:#aaa;opacity:0.5;"></span>
+    既存の予定を削除
+  `;
+  delLabel.addEventListener('click', () => {
+    document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
+    delLabel.classList.add('active');
+    if (rawEvents.length > 0) calendar.refetchEvents();
+  });
+  container.appendChild(delLabel);
+}
+
+// =====================================================================
+// サイドバー描画
+// =====================================================================
+function renderSidebar() {
+  renderClientListTo('clientList',        'filterAll');
+  renderClientListTo('clientListMobile',  'filterAllMobile');
+}
+
+function renderClientListTo(listId, allCbId) {
+  const container = document.getElementById(listId);
+  container.innerHTML = '';
+
+  const visibleClients = getVisibleClients();
+
+  if (visibleClients.length === 0) {
+    const msg = activeAreaId === '__all__'
+      ? '会社がありません。設定から追加してください。'
+      : 'このエリアに会社がありません。';
+    container.innerHTML = `<div class="text-muted small p-3">${msg}</div>`;
+    syncFilterAll(allCbId);
+    return;
+  }
+
+  visibleClients.forEach(client => {
+    const isChecked = checkedClients.has(client.name);
+    const isActive  = inputModeClient === client.name;
+    const rule      = clientRules[client.name];
+    const clientColor = (client.color && client.color !== '') ? client.color : '#6c757d';
+    // エリア名を表示
+    const area = areas.find(a => a.id === client.areaId);
+
+    const item = document.createElement('div');
+    item.className = 'client-item' + (isActive ? ' input-active' : '');
+    item.dataset.name = client.name;
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'filter-cb form-check-input';
+    cb.checked = isChecked;
+    cb.title = '表示/非表示';
+    cb.addEventListener('change', () => {
+      if (cb.checked) checkedClients.add(client.name);
+      else            checkedClients.delete(client.name);
+      syncFilterAll(allCbId);
+      if (!inputModeClient) calendar.refetchEvents();
     });
 
-    document.getElementById('saveButton').addEventListener('click', function() {
-      const id = document.getElementById('eventId').value;
-      const title = document.getElementById('eventTitle').value;
-      if (!title) return alert('内容を入力してください');
+    // 会社カラードット
+    const colorDot = document.createElement('span');
+    colorDot.className = 'client-color-dot';
+    colorDot.style.background = clientColor;
+    colorDot.title = area ? area.name : '';
 
-      const eventData = {
-        id: id,
-        title: title,
-        start: document.getElementById('eventStartDate').value,
-        end: document.getElementById('eventEndDate').value,
-        extendedProps: { clientName: document.getElementById('clientName').value }
-      };
-      
-      showLoading(true);
-      eventModal.hide();
-      
-      const callback = function() { 
-        rawEvents = [];
-        calendar.refetchEvents(); 
-      };
+    const nameWrap = document.createElement('div');
+    nameWrap.className = 'client-name-wrap';
 
-      if (id) google.script.run.withSuccessHandler(callback).updateHoliday(eventData);
-      else google.script.run.withSuccessHandler(callback).addHoliday(eventData);
+    const nameLabel = document.createElement('div');
+    nameLabel.className = 'client-name-label';
+    nameLabel.textContent = client.name;
+    nameWrap.appendChild(nameLabel);
+
+
+
+    item.appendChild(cb);
+    item.appendChild(colorDot);
+    item.appendChild(nameWrap);
+
+    // 備考ボタン（備考がある場合のみ表示）
+    if (rule) {
+      const ruleBtn = document.createElement('button');
+      ruleBtn.className = 'rule-info-btn';
+      ruleBtn.textContent = '📋';
+      ruleBtn.title = '備考を表示';
+      ruleBtn.addEventListener('click', () => showInfoBar(client.name));
+      item.appendChild(ruleBtn);
+    }
+
+    // 入力ボタン（権限がある場合のみ表示）
+    if (canEdit(client.name)) {
+      const inputBtn = document.createElement('button');
+      inputBtn.className = 'input-start-btn';
+      inputBtn.textContent = isActive ? '入力中' : '▶ 入力';
+      inputBtn.title = isActive ? '入力モードを終了するには上の ✕ を押してください' : client.name + ' の予定を入力する';
+      inputBtn.addEventListener('click', () => {
+        if (isActive) return;
+        enterInputMode(client.name);
+      });
+      item.appendChild(inputBtn);
+    }
+
+    container.appendChild(item);
+  });
+
+  syncFilterAll(allCbId);
+}
+
+function syncFilterAll(allCbId) {
+  const allCb = document.getElementById(allCbId);
+  if (!allCb) return;
+  const visible = getVisibleClients();
+  allCb.checked = visible.length > 0 && visible.every(c => checkedClients.has(c.name));
+  allCb.indeterminate = !allCb.checked && visible.some(c => checkedClients.has(c.name));
+}
+
+// =====================================================================
+// 入力モード
+// =====================================================================
+function enterInputMode(clientName) {
+  if (!canEdit(clientName)) { showAlert('この会社への入力権限がありません'); return; }
+
+  if (inputModeClient && inputModeClient !== clientName && getTotalSelectedCount() > 0) {
+    showConfirm(
+      `${inputModeClient} の選択中（${getTotalSelectedCount()}日）が未保存です。\n${clientName} に切り替えますか？`,
+      () => _doEnterInputMode(clientName)
+    );
+    return;
+  }
+  _doEnterInputMode(clientName);
+}
+
+function _doEnterInputMode(clientName) {
+  if (!inputModeClient) preInputFilters = new Set(checkedClients);
+
+  inputModeClient = clientName;
+  selectionsByPattern.clear();
+  draggedDates.clear();
+
+  // パレットのドット色を入力中の得意先カラーに更新
+  buildPalette();
+
+  document.getElementById('inputModeLabel').textContent = clientName + ' 入力モード';
+  document.getElementById('inputToolbar').classList.remove('d-none');
+  document.getElementById('stopInputBtn').classList.remove('d-none');
+  document.getElementById('stopInputBtnMobile').classList.remove('d-none');
+
+  // 備考は clientInfoBar に表示（ruleDisplay は使わない）
+  showInfoBar(clientName);
+
+  updateFooter();
+  renderSidebar();
+  calendar.refetchEvents();
+
+  const oc = bootstrap.Offcanvas.getInstance(document.getElementById('sidebarOffcanvas'));
+  if (oc) oc.hide();
+}
+
+function exitInputMode() {
+  inputModeClient = null;
+  selectionsByPattern.clear();
+  draggedDates.clear();
+  wasDragging = false;
+
+  document.getElementById('inputToolbar').classList.add('d-none');
+  document.getElementById('stickyFooter').classList.add('d-none');
+  document.getElementById('stopInputBtn').classList.add('d-none');
+  document.getElementById('stopInputBtnMobile').classList.add('d-none');
+  hideInfoBar();
+
+  if (preInputFilters !== null) {
+    checkedClients = preInputFilters;
+    preInputFilters = null;
+  }
+
+  renderSidebar();
+  calendar.refetchEvents();
+}
+
+// =====================================================================
+// 日付選択
+// =====================================================================
+function toggleDateSelection(dateStr) {
+  const patId = getSelectedPatternId();
+  if (!patId) return;
+
+  if (patId === '__delete__') {
+    const hasEvent = rawEvents.some(ev => {
+      const p = ev.extendedProps || {};
+      return !p.isHoliday && p.clientName === inputModeClient && toDateStrFromAny(ev.start) === dateStr;
     });
-  </script>
+    if (!hasEvent) return;
+    if (!selectionsByPattern.has('__delete__')) selectionsByPattern.set('__delete__', new Set());
+    const delSet = selectionsByPattern.get('__delete__');
+    if (delSet.has(dateStr)) {
+      delSet.delete(dateStr);
+    } else {
+      selectionsByPattern.forEach((s, pid) => { if (pid !== '__delete__') s.delete(dateStr); });
+      delSet.add(dateStr);
+    }
+  } else {
+    const set = selectionsByPattern.get(patId);
+    if (set && set.has(dateStr)) {
+      set.delete(dateStr);
+    } else {
+      addToSelection(patId, dateStr);
+    }
+  }
+  updateSelectedCells();
+  updateFooter();
+  calendar.refetchEvents();
+}
+
+function updateSelectedCells() {
+  document.querySelectorAll('.fc-daygrid-day.selected-cell').forEach(el => el.classList.remove('selected-cell'));
+  getAllSelectedDates().forEach(dateStr => {
+    const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
+    if (cell) cell.classList.add('selected-cell');
+  });
+}
+
+function updateDragHighlight() {
+  document.querySelectorAll('.fc-daygrid-day.drag-highlight').forEach(el => el.classList.remove('drag-highlight'));
+  draggedDates.forEach(dateStr => {
+    const cell = document.querySelector(`.fc-daygrid-day[data-date="${dateStr}"]`);
+    if (cell) cell.classList.add('drag-highlight');
+  });
+}
+
+function updateFooter() {
+  const n = getTotalSelectedCount();
+  const footer = document.getElementById('stickyFooter');
+  if (!inputModeClient || n === 0) {
+    footer.classList.add('d-none');
+  } else {
+    footer.classList.remove('d-none');
+    const parts = [];
+    selectionsByPattern.forEach((set, patId) => {
+      if (set.size === 0) return;
+      if (patId === '__delete__') { parts.push(`削除 ${set.size}日`); return; }
+      const pat = patterns.find(p => p.id === patId);
+      parts.push((pat ? pat.name : '?') + ' ' + set.size + '日');
+    });
+    document.getElementById('selectedCount').textContent = parts.join(' / ') + ' 選択中';
+  }
+}
+
+// =====================================================================
+// ドラッグ選択
+// =====================================================================
+function setupDragSelection(calEl) {
+  calEl.addEventListener('pointerdown', e => {
+    if (!inputModeClient) return;
+    const cell = e.target.closest('[data-date]');
+    if (!cell) return;
+    isDragging    = false;
+    pointerDownDate = cell.dataset.date;
+    draggedDates.clear();
+  }, { passive: true });
+
+  calEl.addEventListener('pointermove', e => {
+    if (!pointerDownDate || !inputModeClient) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const cell = el && el.closest('[data-date]');
+    if (!cell) return;
+    const date = cell.dataset.date;
+    if (!isDragging && date !== pointerDownDate) {
+      isDragging = true;
+      draggedDates.add(pointerDownDate);
+    }
+    if (isDragging && !draggedDates.has(date)) {
+      draggedDates.add(date);
+      updateDragHighlight();
+    }
+  }, { passive: true });
+
+  document.addEventListener('pointerup', () => {
+    if (!pointerDownDate) return;
+    const wasD = isDragging;
+    pointerDownDate = null;
+    isDragging = false;
+
+    if (wasD && draggedDates.size > 0) {
+      wasDragging = true;
+      const dragPatId = getSelectedPatternId();
+      if (dragPatId) draggedDates.forEach(d => addToSelection(dragPatId, d));
+      draggedDates.clear();
+      updateDragHighlight();
+      updateSelectedCells();
+      updateFooter();
+      calendar.refetchEvents();
+      setTimeout(() => { wasDragging = false; }, 150);
+    }
+  });
+}
+
+// =====================================================================
+// 一括選択ボタン
+// =====================================================================
+function localDateStr(year, month, day) {
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function selectAllWeekends() {
+  if (!inputModeClient) return;
+  const patId = getSelectedPatternId();
+  if (!patId || patId === '__delete__') return;
+  const viewDate = calendar.getDate();
+  const year = viewDate.getFullYear(), month = viewDate.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const targets = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, month, d).getDay();
+    if (dow === 0 || dow === 6) targets.push(localDateStr(year, month, d));
+  }
+
+  const curSet = selectionsByPattern.get(patId) || new Set();
+  const allSelected = targets.length > 0 && targets.every(d => curSet.has(d));
+  if (allSelected) {
+    targets.forEach(d => curSet.delete(d));
+  } else {
+    targets.forEach(d => addToSelection(patId, d));
+  }
+
+  updateSelectedCells();
+  updateFooter();
+  calendar.refetchEvents();
+}
+
+function selectHolidays() {
+  if (!inputModeClient) return;
+  const patId = getSelectedPatternId();
+  if (!patId || patId === '__delete__') return;
+  const viewDate = calendar.getDate();
+  const year = viewDate.getFullYear(), month = viewDate.getMonth();
+
+  const targets = [];
+  holidayDates.forEach(dateStr => {
+    const [y, m] = dateStr.split('-').map(Number);
+    if (y === year && m - 1 === month) targets.push(dateStr);
+  });
+
+  const curSet = selectionsByPattern.get(patId) || new Set();
+  const allSelected = targets.length > 0 && targets.every(d => curSet.has(d));
+  if (allSelected) {
+    targets.forEach(d => curSet.delete(d));
+  } else {
+    targets.forEach(d => addToSelection(patId, d));
+  }
+
+  updateSelectedCells();
+  updateFooter();
+  calendar.refetchEvents();
+}
+
+function clearSelection() {
+  selectionsByPattern.clear();
+  draggedDates.clear();
+  updateSelectedCells();
+  updateFooter();
+  calendar.refetchEvents();
+}
+
+// =====================================================================
+// 一括登録
+// =====================================================================
+function bulkRegister() {
+  if (!inputModeClient || getTotalSelectedCount() === 0) return;
+
+  const deleteDates = Array.from(selectionsByPattern.get('__delete__') || []).sort();
+  const savePayloads = [];
+  selectionsByPattern.forEach((dateSet, patId) => {
+    if (patId === '__delete__' || dateSet.size === 0) return;
+    savePayloads.push({
+      clientName: inputModeClient,
+      entries: Array.from(dateSet).sort().map(date => ({ date, patternId: patId }))
+    });
+  });
+
+  if (savePayloads.length === 0 && deleteDates.length === 0) return;
+
+  const lines = [];
+  savePayloads.forEach(p => {
+    const pat = patterns.find(x => x.id === p.entries[0].patternId);
+    lines.push(`・${pat ? pat.name : '?'} → ${p.entries.length}日`);
+  });
+  if (deleteDates.length > 0) lines.push(`・削除 → ${deleteDates.length}日`);
+  const clientForBulk = inputModeClient;
+
+  showConfirm(
+    `${clientForBulk} に以下の内容を登録しますか？\n${lines.join('\n')}`,
+    () => _executeBulkRegister(clientForBulk, deleteDates, savePayloads)
+  );
+}
+
+function _executeBulkRegister(clientName, deleteDates, savePayloads) {
+  showLoading(true);
+
+  const doNextSave = (idx, totalAdded, totalSkipped) => {
+    if (idx >= savePayloads.length) {
+      showLoading(false);
+      exitInputMode();
+      reloadEvents();
+      const msg = `登録完了！${totalAdded}件追加${totalSkipped > 0 ? '\n（' + totalSkipped + '件は重複スキップ）' : ''}`;
+      showAlert(msg);
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(result => {
+        if (result.status !== 'success') {
+          showLoading(false);
+          showAlert('登録エラー: ' + result.message);
+          return;
+        }
+        doNextSave(idx + 1, totalAdded + result.added, totalSkipped + result.skipped);
+      })
+      .withFailureHandler(handleError)
+      .saveHolidaysBulk(savePayloads[idx]);
+  };
+
+  if (deleteDates.length > 0) {
+    google.script.run
+      .withSuccessHandler(result => {
+        if (result.status !== 'success') {
+          showLoading(false);
+          showAlert('削除エラー: ' + result.message);
+          return;
+        }
+        doNextSave(0, 0, 0);
+      })
+      .withFailureHandler(handleError)
+      .deleteHolidaysBulk(clientName, deleteDates);
+  } else {
+    doNextSave(0, 0, 0);
+  }
+}
+
+// =====================================================================
+// 設定モーダル
+// =====================================================================
+function openSettings() {
+  if (!canOpenSettings()) { showAlert('設定を開く権限がありません'); return; }
+  refreshSettingsAreaSelects();
+  renderClientSettings();
+  renderAreaSettings();
+  renderPatternSettings();
+  if (currentUser && currentUser.isAdmin) {
+    google.script.run
+      .withSuccessHandler(data => { users = data || []; renderUserSettings(); })
+      .withFailureHandler(handleError)
+      .getUsers();
+  }
+  settingsModal.show();
+}
+
+/** 設定モーダル内のエリアセレクト・チェックボックスを最新状態に更新 */
+function refreshSettingsAreaSelects() {
+  const selects = ['newClientArea'];
+  selects.forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">未設定</option>';
+    areas.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.name;
+      if (a.id === cur) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  });
+  // ユーザー追加フォームの表示エリア・編集エリアチェックボックスを再生成
+  ['newUserViewableChecks', 'newUserEditableChecks'].forEach(containerId => {
+    const wrap = document.getElementById(containerId);
+    if (!wrap) return;
+    wrap.innerHTML = areas.map(a =>
+      `<label class="d-flex align-items-center gap-1" style="font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" class="${containerId}_cb" value="${escHtml(a.id)}">
+        ${escHtml(a.name)}
+      </label>`
+    ).join('');
+  });
+}
+
+/** チェックボックスグループからカンマ区切りIDを収集 */
+function collectCheckedAreas(containerId) {
+  return [...document.querySelectorAll(`#${containerId} input[type=checkbox]:checked`)]
+    .map(cb => cb.value).join(',');
+}
+
+// ===== 会社管理 =====
+function renderClientSettings() {
+  const container = document.getElementById('clientSettingsList');
+  // 管理者は全社、それ以外は編集エリアに含まれる会社のみ表示
+  let visibleForSettings = clients;
+  if (!isAdmin() && currentUser) {
+    const editList = parseIdList(currentUser.editableAreas);
+    if (editList.length > 0) {
+      visibleForSettings = clients.filter(c => editList.includes(c.areaId));
+    }
+  }
+
+  if (visibleForSettings.length === 0) {
+    container.innerHTML = '<div class="text-muted small p-3">会社がありません</div>';
+    return;
+  }
+  container.innerHTML = visibleForSettings.map(c => {
+    const area = areas.find(a => a.id === c.areaId);
+    const clientColor = (c.color && c.color !== '') ? c.color : '#6c757d';
+    return `
+      <div class="settings-item">
+        <div class="color-preview" style="background:${escHtml(clientColor)}"></div>
+        <div class="item-name">${escHtml(c.name)}</div>
+        <div class="item-meta">${area ? escHtml(area.name) : '未設定'}</div>
+        <button class="btn btn-xs btn-outline-secondary btn-sm ms-auto" style="padding:2px 8px;font-size:0.75rem"
+          onclick="editClientModal('${escHtml(c.id)}')">編集</button>
+        <button class="btn btn-xs btn-outline-danger btn-sm ms-1" style="padding:2px 8px;font-size:0.75rem"
+          onclick="deleteClientConfirm('${escHtml(c.id)}','${escHtml(c.name)}')">削除</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function handleAddClient() {
+  const name = document.getElementById('newClientName').value.trim();
+  if (!name) { showAlert('会社名を入力してください'); return; }
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(result => {
+      showLoading(false);
+      if (result.status === 'success') {
+        document.getElementById('newClientName').value = '';
+        document.getElementById('newClientMemo').value = '';
+        reloadClients();
+      } else { showAlert('追加エラー: ' + result.message); }
+    })
+    .withFailureHandler(handleError)
+    .addClient({
+      name,
+      memo:   document.getElementById('newClientMemo').value.trim(),
+      areaId: document.getElementById('newClientArea').value,
+      color:  document.getElementById('newClientColor').value
+    });
+}
+
+function editClientModal(id) {
+  // IDでclients配列からデータを取得（改行等の特殊文字問題を回避）
+  const c = clients.find(x => x.id === id);
+  if (!c) { showAlert('会社データが見つかりません'); return; }
+  const clientColor = (c.color && c.color !== '') ? c.color : '#6c757d';
+  document.getElementById('editModalTitle').textContent = '会社を編集';
+  const areaOptions = areas.map(a =>
+    `<option value="${escHtml(a.id)}" ${a.id === c.areaId ? 'selected' : ''}>${escHtml(a.name)}</option>`
+  ).join('');
+  document.getElementById('editModalBody').innerHTML = `
+    <div class="mb-2"><label class="form-label form-label-sm">会社名</label>
+      <input type="text" id="editClientName" class="form-control form-control-sm" value="${escHtml(c.name)}"></div>
+    <div class="mb-2"><label class="form-label form-label-sm">備考</label>
+      <textarea id="editClientMemo" class="form-control form-control-sm" rows="3">${escHtml(c.memo || '')}</textarea></div>
+    <div class="mb-2"><label class="form-label form-label-sm">エリア</label>
+      <select id="editClientArea" class="form-select form-select-sm">
+        <option value="">未設定</option>${areaOptions}
+      </select></div>
+    <div><label class="form-label form-label-sm">色</label>
+      <input type="color" id="editClientColor" class="form-control form-control-sm form-control-color" value="${escHtml(clientColor)}" style="width:50px"></div>
+  `;
+  document.getElementById('editModalSaveBtn').onclick = () => {
+    const newName = document.getElementById('editClientName').value.trim();
+    if (!newName) { showAlert('会社名を入力してください'); return; }
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        editModalBS.hide();
+        if (result.status === 'success') reloadClients();
+        else showAlert('更新エラー: ' + result.message);
+      })
+      .withFailureHandler(handleError)
+      .updateClient({
+        id,
+        name:   newName,
+        memo:   document.getElementById('editClientMemo').value,
+        areaId: document.getElementById('editClientArea').value,
+        color:  document.getElementById('editClientColor').value
+      });
+  };
+  editModalBS.show();
+}
+
+function deleteClientConfirm(id, name) {
+  showConfirm(`「${name}」を削除しますか？\n（この会社の予定データは残ります）`, () => {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        if (result.status === 'success') reloadClients();
+        else showAlert('削除エラー: ' + result.message);
+      })
+      .withFailureHandler(handleError)
+      .deleteClient(id);
+  });
+}
+
+function reloadClients() {
+  google.script.run
+    .withSuccessHandler(data => {
+      clients = data || [];
+      clientRules = {};
+      clients.forEach(c => { if (c.memo && c.memo.trim()) clientRules[c.name] = c.memo.trim(); });
+      const clientNames = new Set(clients.map(c => c.name));
+      checkedClients = new Set([...checkedClients].filter(n => clientNames.has(n)));
+      clients.forEach(c => { if (!checkedClients.has(c.name)) checkedClients.add(c.name); });
+      renderSidebar();
+      renderClientSettings();
+      // イベントの色も再取得
+      reloadEvents();
+    })
+    .withFailureHandler(handleError)
+    .getClients();
+}
+
+// ===== エリア管理 =====
+function renderAreaSettings() {
+  const container = document.getElementById('areaSettingsList');
+  if (areas.length === 0) {
+    container.innerHTML = '<div class="text-muted small p-3">エリアがありません</div>';
+    return;
+  }
+  container.innerHTML = areas.map(a => `
+    <div class="settings-item">
+      <div class="item-name">${escHtml(a.name)}</div>
+      <div class="item-meta ms-auto">
+        ${isAdmin() ? `
+        <button class="btn btn-xs btn-outline-secondary btn-sm ms-2" style="padding:2px 8px;font-size:0.75rem"
+          onclick="editAreaModal('${escHtml(a.id)}','${escHtml(a.name)}')">編集</button>
+        <button class="btn btn-xs btn-outline-danger btn-sm ms-1" style="padding:2px 8px;font-size:0.75rem"
+          onclick="deleteAreaConfirm('${escHtml(a.id)}','${escHtml(a.name)}')">削除</button>
+        ` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function handleAddArea() {
+  const name = document.getElementById('newAreaName').value.trim();
+  if (!name) { showAlert('エリア名を入力してください'); return; }
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(result => {
+      showLoading(false);
+      if (result.status === 'success') {
+        document.getElementById('newAreaName').value = '';
+        reloadAreas();
+      } else { showAlert('追加エラー: ' + result.message); }
+    })
+    .withFailureHandler(handleError)
+    .addArea({ name });
+}
+
+function editAreaModal(id, name) {
+  document.getElementById('editModalTitle').textContent = 'エリアを編集';
+  document.getElementById('editModalBody').innerHTML = `
+    <div><label class="form-label form-label-sm">エリア名</label>
+      <input type="text" id="editAreaName" class="form-control form-control-sm" value="${escHtml(name)}"></div>
+  `;
+  document.getElementById('editModalSaveBtn').onclick = () => {
+    const newName = document.getElementById('editAreaName').value.trim();
+    if (!newName) { showAlert('エリア名を入力してください'); return; }
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        editModalBS.hide();
+        if (result.status === 'success') reloadAreas();
+        else showAlert('更新エラー: ' + result.message);
+      })
+      .withFailureHandler(handleError)
+      .updateArea({ id, name: newName });
+  };
+  editModalBS.show();
+}
+
+function deleteAreaConfirm(id, name) {
+  showConfirm(`エリア「${name}」を削除しますか？\n（このエリアに属する会社のエリア設定はクリアされます）`, () => {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        if (result.status === 'success') reloadAreas();
+        else showAlert('削除エラー: ' + result.message);
+      })
+      .withFailureHandler(handleError)
+      .deleteArea(id);
+  });
+}
+
+function reloadAreas() {
+  google.script.run
+    .withSuccessHandler(data => {
+      areas = data || [];
+      // アクティブなエリアが削除されていたら「全て」に戻す
+      if (activeAreaId !== '__all__' && !areas.find(a => a.id === activeAreaId)) {
+        activeAreaId = '__all__';
+      }
+      renderAreaTabs();
+      renderAreaSettings();
+      refreshSettingsAreaSelects();
+      renderClientSettings();
+      renderSidebar();
+    })
+    .withFailureHandler(handleError)
+    .getAreas();
+}
+
+// ===== パターン管理 =====
+function renderPatternSettings() {
+  const container = document.getElementById('patternSettingsList');
+  if (patterns.length === 0) {
+    container.innerHTML = '<div class="text-muted small p-3">パターンがありません</div>';
+    return;
+  }
+  container.innerHTML = patterns.map(p => `
+    <div class="settings-item">
+      <div class="item-name">${escHtml(p.name)}</div>
+      <div class="item-meta">${p.startTime === 'allday' ? '終日' : escHtml(p.startTime) + '〜' + escHtml(p.endTime)}</div>
+      <button class="btn btn-xs btn-outline-secondary btn-sm ms-2" style="padding:2px 8px;font-size:0.75rem"
+        onclick="editPatternModal('${escHtml(p.id)}','${escHtml(p.name)}','${escHtml(p.startTime)}','${escHtml(p.endTime)}','${escHtml(p.color)}',${p.order})">編集</button>
+      <button class="btn btn-xs btn-outline-danger btn-sm ms-1" style="padding:2px 8px;font-size:0.75rem"
+        onclick="deletePatternConfirm('${escHtml(p.id)}','${escHtml(p.name)}')">削除</button>
+    </div>
+  `).join('');
+}
+
+function handleAddPattern() {
+  const name = document.getElementById('newPatternName').value.trim();
+  if (!name) { showAlert('パターン名を入力してください'); return; }
+  const startTime = document.getElementById('newPatternStart').value;
+  const endTime   = startTime === 'allday' ? '' : document.getElementById('newPatternEnd').value;
+  const color     = '#6c757d'; // パターン色は固定（得意先色を使用するため）
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(result => {
+      showLoading(false);
+      if (result.status === 'success') {
+        document.getElementById('newPatternName').value = '';
+        reloadPatterns();
+      } else { showAlert('追加エラー: ' + result.message); }
+    })
+    .withFailureHandler(handleError)
+    .addPattern({ name, startTime, endTime, color });
+}
+
+function editPatternModal(id, name, startTime, endTime, color, order) {
+  const isAllday = startTime === 'allday';
+  document.getElementById('editModalTitle').textContent = 'パターンを編集';
+  document.getElementById('editModalBody').innerHTML = `
+    <div class="mb-2"><label class="form-label form-label-sm">パターン名</label>
+      <input type="text" id="ep_name" class="form-control form-control-sm" value="${escHtml(name)}"></div>
+    <div class="mb-2"><label class="form-label form-label-sm">開始時刻</label>
+      <select id="ep_start" class="form-select form-select-sm">
+        ${['allday','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00']
+          .map(v => `<option value="${v}" ${v===startTime?'selected':''}>${v==='allday'?'終日':v}</option>`).join('')}
+      </select></div>
+    <div class="mb-2" id="ep_end_wrap" ${isAllday?'style="display:none"':''}>
+      <label class="form-label form-label-sm">終了時刻</label>
+      <select id="ep_end" class="form-select form-select-sm">
+        ${['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00']
+          .map(v => `<option value="${v}" ${v===endTime?'selected':''}>${v}</option>`).join('')}
+      </select></div>
+    <div><label class="form-label form-label-sm">並び順</label>
+      <input type="number" id="ep_order" class="form-control form-control-sm" value="${order}" style="width:80px"></div>
+  `;
+  document.getElementById('ep_start').addEventListener('change', function() {
+    document.getElementById('ep_end_wrap').style.display = this.value === 'allday' ? 'none' : '';
+  });
+  document.getElementById('editModalSaveBtn').onclick = () => {
+    const newName = document.getElementById('ep_name').value.trim();
+    if (!newName) { showAlert('パターン名を入力してください'); return; }
+    const newStart = document.getElementById('ep_start').value;
+    const newEnd   = newStart === 'allday' ? '' : document.getElementById('ep_end').value;
+    const newColor = color; // 色はそのまま保持
+    const newOrder = parseInt(document.getElementById('ep_order').value) || order;
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        editModalBS.hide();
+        if (result.status === 'success') reloadPatterns();
+        else showAlert('更新エラー: ' + result.message);
+      })
+      .withFailureHandler(handleError)
+      .updatePattern({ id, name: newName, startTime: newStart, endTime: newEnd, color: newColor, order: newOrder });
+  };
+  editModalBS.show();
+}
+
+function deletePatternConfirm(id, name) {
+  showConfirm(`パターン「${name}」を削除しますか？`, () => {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        if (result.status === 'success') reloadPatterns();
+        else showAlert('削除エラー: ' + result.message);
+      })
+      .withFailureHandler(handleError)
+      .deletePattern(id);
+  });
+}
+
+function reloadPatterns() {
+  google.script.run
+    .withSuccessHandler(data => {
+      patterns = data || [];
+      buildPalette();
+      renderPatternSettings();
+      if (rawEvents.length > 0) calendar.refetchEvents();
+    })
+    .withFailureHandler(handleError)
+    .getPatterns();
+}
+
+// ===== ユーザー管理（管理者のみ） =====
+function renderUserSettings() {
+  const container = document.getElementById('userSettingsList');
+  if (users.length === 0) {
+    container.innerHTML = '<div class="text-muted small p-3">ユーザーがいません</div>';
+    return;
+  }
+  container.innerHTML = users.map(u => {
+    const viewList = parseIdList(u.viewableAreas);
+    const editList = parseIdList(u.editableAreas);
+    const adminMark = u.isAdmin ? ' ★' : '';
+    const viewText = viewList.length === 0 ? '全て'
+      : viewList.map(id => { const a = areas.find(x => x.id === id); return a ? a.name : ''; }).filter(Boolean).join(',');
+    const editText = editList.length === 0 ? '不可'
+      : editList.map(id => { const a = areas.find(x => x.id === id); return a ? a.name : ''; }).filter(Boolean).join(',');
+    return `
+      <div class="settings-item" style="gap:6px;">
+        <div style="flex:0 0 auto;font-size:0.88rem;font-weight:600;">${escHtml(u.name)}${escHtml(adminMark)}</div>
+        <div class="item-meta" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(u.email)}</div>
+        <div class="item-meta" style="flex:0 0 auto;font-size:0.75rem;">表示:${escHtml(viewText)}</div>
+        <div class="item-meta" style="flex:0 0 auto;font-size:0.75rem;">編集:${escHtml(editText)}</div>
+        <button class="btn btn-xs btn-outline-secondary btn-sm" style="flex:0 0 auto;padding:2px 8px;font-size:0.75rem"
+          onclick="editUserModal('${escHtml(u.id)}','${escHtml(u.name)}','${escHtml(u.email)}',${!!u.isAdmin},'${escHtml(u.viewableAreas||'')}','${escHtml(u.editableAreas||'')}')">編集</button>
+        <button class="btn btn-xs btn-outline-danger btn-sm" style="flex:0 0 auto;padding:2px 8px;font-size:0.75rem"
+          onclick="deleteUserConfirm('${escHtml(u.id)}','${escHtml(u.name)}')">削除</button>
+      </div>
+    `;
+  }).join('');
+}
+
+function handleAddUser() {
+  const name  = document.getElementById('newUserName').value.trim();
+  const email = document.getElementById('newUserEmail').value.trim();
+  if (!name)  { showAlert('名前を入力してください'); return; }
+  if (!email) { showAlert('メールアドレスを入力してください'); return; }
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(result => {
+      showLoading(false);
+      if (result.status === 'success') {
+        document.getElementById('newUserName').value  = '';
+        document.getElementById('newUserEmail').value = '';
+        reloadUsers();
+      } else { showAlert('追加エラー: ' + result.message); }
+    })
+    .withFailureHandler(handleError)
+    .addUser({
+      name,
+      email,
+      isAdmin:       document.getElementById('newUserIsAdmin').checked,
+      viewableAreas: document.querySelector('input[name="newViewMode"]:checked').value === 'all'
+                      ? '' : collectCheckedAreas('newUserViewableChecks'),
+      // 管理者は editableAreas = ''（全エリア編集可）、それ以外はUIから取得
+      editableAreas: (function() {
+        if (document.getElementById('newUserIsAdmin').checked) return '';
+        const modeEl = document.querySelector('input[name="newEditMode"]:checked');
+        if (!modeEl || modeEl.value === 'none') return '';
+        return [...document.querySelectorAll('.newUserEditableChecks_cb:checked')].map(cb => cb.value).join(',');
+      })()
+    });
+}
+
+/** 追加フォーム用: 管理者チェックON/OFFで編集エリアセクションを切り替え */
+function onNewAdminCheckChange(checked) {
+  const content = document.getElementById('newUserEditContent');
+  if (!content) return;
+  if (checked) {
+    content.innerHTML = '<div class="text-success py-1" style="font-size:0.85rem;">★ 管理者は全エリアを編集できます</div>';
+  } else {
+    const editChecks = areas.map(a =>
+      `<label class="d-flex align-items-center gap-1" style="font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" class="newUserEditableChecks_cb" value="${escHtml(a.id)}"> ${escHtml(a.name)}
+      </label>`
+    ).join('');
+    content.innerHTML = `
+      <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
+        <input type="radio" name="newEditMode" value="none" checked
+          onchange="document.getElementById('newUserEditSub').classList.add('d-none')">編集不可
+      </label>
+      <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
+        <input type="radio" name="newEditMode" value="select"
+          onchange="document.getElementById('newUserEditSub').classList.remove('d-none')">選んで編集可
+      </label>
+      <div id="newUserEditSub" class="d-flex flex-wrap gap-2 ps-2 d-none">${editChecks}</div>`;
+  }
+}
+
+/** 編集モーダル用: 管理者チェックON/OFFで編集エリアセクションを切り替え */
+function onAdminCheckChange(checked) {
+  const content = document.getElementById('eu_editContent');
+  if (!content) return;
+  if (checked) {
+    content.innerHTML = '<div class="text-success py-1" style="font-size:0.85rem;">★ 管理者は全エリアを編集できます</div>';
+  } else {
+    const editChecks = areas.map(a =>
+      `<label class="d-flex align-items-center gap-1" style="font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" class="eu_editCb" value="${escHtml(a.id)}"> ${escHtml(a.name)}
+      </label>`
+    ).join('');
+    content.innerHTML = `
+      <label class="d-flex align-items-center gap-1 mb-2" style="font-size:0.85rem;cursor:pointer;">
+        <input type="radio" name="eu_editMode" value="none" checked
+          onchange="document.getElementById('eu_editChecks').classList.add('d-none')">
+        編集不可（閲覧のみ）
+      </label>
+      <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.85rem;cursor:pointer;">
+        <input type="radio" name="eu_editMode" value="select"
+          onchange="document.getElementById('eu_editChecks').classList.remove('d-none')">
+        エリアを選んで編集可
+      </label>
+      <div id="eu_editChecks" class="d-flex flex-wrap gap-2 ps-3 pt-1 d-none">
+        ${editChecks || '<span class="text-muted small">エリアなし</span>'}
+      </div>`;
+  }
+}
+
+function editUserModal(id, name, email, isAdmin, viewableAreas, editableAreas) {
+  document.getElementById('editModalTitle').textContent = 'ユーザーを編集';
+  const viewList = parseIdList(viewableAreas);
+  const editList = parseIdList(editableAreas);
+  const viewAll = viewList.length === 0;
+  const editNone = editList.length === 0;
+  const viewChecks = areas.map(a =>
+    `<label class="d-flex align-items-center gap-1" style="font-size:0.82rem;cursor:pointer;">
+      <input type="checkbox" class="eu_viewCb" value="${escHtml(a.id)}" ${viewList.includes(a.id) ? 'checked' : ''}>
+      ${escHtml(a.name)}
+    </label>`
+  ).join('');
+  const editChecks = areas.map(a =>
+    `<label class="d-flex align-items-center gap-1" style="font-size:0.82rem;cursor:pointer;">
+      <input type="checkbox" class="eu_editCb" value="${escHtml(a.id)}" ${editList.includes(a.id) ? 'checked' : ''}>
+      ${escHtml(a.name)}
+    </label>`
+  ).join('');
+
+  document.getElementById('editModalBody').innerHTML = `
+    <div class="mb-2"><label class="form-label form-label-sm">名前</label>
+      <input type="text" id="eu_name" class="form-control form-control-sm" value="${escHtml(name)}"></div>
+    <div class="mb-2"><label class="form-label form-label-sm">メールアドレス</label>
+      <input type="email" id="eu_email" class="form-control form-control-sm" value="${escHtml(email)}"></div>
+    <div class="mb-3">
+      <label class="d-flex align-items-center gap-2" style="font-size:0.85rem;cursor:pointer;">
+        <input type="checkbox" id="eu_isAdmin" ${isAdmin ? 'checked' : ''}
+          onchange="onAdminCheckChange(this.checked)">
+        管理者権限（設定・ユーザー管理にアクセス可）
+      </label>
+    </div>
+    <div class="mb-2 border rounded p-2">
+      <div class="form-label form-label-sm fw-bold mb-2">表示エリア <span class="text-muted" style="font-size:0.75rem;">（未選択=全て表示）</span></div>
+      <label class="d-flex align-items-center gap-1 mb-2" style="font-size:0.85rem;cursor:pointer;">
+        <input type="radio" name="eu_viewMode" value="all" ${viewAll ? 'checked' : ''}
+          onchange="document.getElementById('eu_viewChecks').classList.add('d-none')">
+        全エリアを表示
+      </label>
+      <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.85rem;cursor:pointer;">
+        <input type="radio" name="eu_viewMode" value="select" ${!viewAll ? 'checked' : ''}
+          onchange="document.getElementById('eu_viewChecks').classList.remove('d-none')">
+        エリアを選んで表示
+      </label>
+      <div id="eu_viewChecks" class="d-flex flex-wrap gap-2 ps-3 pt-1 ${viewAll ? 'd-none' : ''}">
+        ${viewChecks || '<span class="text-muted small">エリアなし</span>'}
+      </div>
+    </div>
+    <div class="border rounded p-2">
+      <div class="form-label form-label-sm fw-bold mb-2">編集エリア</div>
+      <div id="eu_editContent">
+        ${isAdmin
+          ? '<div class="text-success py-1" style="font-size:0.85rem;">★ 管理者は全エリアを編集できます</div>'
+          : `<label class="d-flex align-items-center gap-1 mb-2" style="font-size:0.85rem;cursor:pointer;">
+              <input type="radio" name="eu_editMode" value="none" ${editNone ? 'checked' : ''}
+                onchange="document.getElementById('eu_editChecks').classList.add('d-none')">
+              編集不可（閲覧のみ）
+            </label>
+            <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.85rem;cursor:pointer;">
+              <input type="radio" name="eu_editMode" value="select" ${!editNone ? 'checked' : ''}
+                onchange="document.getElementById('eu_editChecks').classList.remove('d-none')">
+              エリアを選んで編集可
+            </label>
+            <div id="eu_editChecks" class="d-flex flex-wrap gap-2 ps-3 pt-1 ${editNone ? 'd-none' : ''}">
+              ${editChecks || '<span class="text-muted small">エリアなし</span>'}
+            </div>`
+        }
+      </div>
+    </div>
+  `;
+  document.getElementById('editModalSaveBtn').onclick = () => {
+    const newName  = document.getElementById('eu_name').value.trim();
+    const newEmail = document.getElementById('eu_email').value.trim();
+    if (!newName)  { showAlert('名前を入力してください'); return; }
+    if (!newEmail) { showAlert('メールアドレスを入力してください'); return; }
+    const adminChecked = document.getElementById('eu_isAdmin').checked;
+    const viewMode = document.querySelector('input[name="eu_viewMode"]:checked').value;
+    const newViewable = viewMode === 'all' ? '' : [...document.querySelectorAll('.eu_viewCb:checked')].map(cb => cb.value).join(',');
+    // 管理者は editableAreas を空に（全エリア編集可）、それ以外はUIから取得
+    let newEditable = '';
+    if (!adminChecked) {
+      const editModeEl = document.querySelector('input[name="eu_editMode"]:checked');
+      const editMode = editModeEl ? editModeEl.value : 'none';
+      newEditable = editMode === 'none' ? '' : [...document.querySelectorAll('.eu_editCb:checked')].map(cb => cb.value).join(',');
+    }
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        editModalBS.hide();
+        if (result.status === 'success') reloadUsers();
+        else showAlert('更新エラー: ' + result.message);
+      })
+      .withFailureHandler(handleError)
+      .updateUser({
+        id,
+        name:          newName,
+        email:         newEmail,
+        isAdmin:       document.getElementById('eu_isAdmin').checked,
+        viewableAreas: newViewable,
+        editableAreas: newEditable
+      });
+  };
+  editModalBS.show();
+}
+
+function deleteUserConfirm(id, name) {
+  showConfirm(`ユーザー「${name}」を削除しますか？`, () => {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        if (result.status === 'success') reloadUsers();
+        else showAlert('削除エラー: ' + result.message);
+      })
+      .withFailureHandler(handleError)
+      .deleteUser(id);
+  });
+}
+
+function reloadUsers() {
+  google.script.run
+    .withSuccessHandler(data => {
+      users = data || [];
+      renderUserSettings();
+    })
+    .withFailureHandler(handleError)
+    .getUsers();
+}
+</script>
 </body>
 </html>
