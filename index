@@ -315,6 +315,10 @@
         <button id="exitInputModeBtn" title="入力モードを終了">✕</button>
       </div>
       <div id="palette"><!-- JS で動的生成 --></div>
+      <div id="customNameWrapper" style="display:none; margin-bottom:6px;">
+        <input type="text" id="customPatternName" class="form-control form-control-sm"
+          placeholder="イベント名を入力" style="max-width:220px; display:inline-block;">
+      </div>
       <div id="bulkActions">
         <button id="selectWeekendsBtn">🗓 土日を全選択</button>
         <button id="selectHolidaysBtn">🎌 祝日を選択</button>
@@ -449,38 +453,7 @@
             <div class="d-flex flex-wrap gap-2 mb-3 align-items-end">
               <div>
                 <label class="form-label form-label-sm mb-1">パターン名</label>
-                <input type="text" id="newPatternName" class="form-control form-control-sm" placeholder="例: 午後不可" style="max-width:140px">
-              </div>
-              <div>
-                <label class="form-label form-label-sm mb-1">開始時刻</label>
-                <select id="newPatternStart" class="form-select form-select-sm" style="max-width:120px">
-                  <option value="allday">終日（休み）</option>
-                  <option value="08:00">08:00</option>
-                  <option value="09:00">09:00</option>
-                  <option value="10:00">10:00</option>
-                  <option value="11:00">11:00</option>
-                  <option value="12:00">12:00</option>
-                  <option value="13:00">13:00</option>
-                  <option value="14:00">14:00</option>
-                  <option value="15:00">15:00</option>
-                  <option value="16:00">16:00</option>
-                  <option value="17:00">17:00</option>
-                </select>
-              </div>
-              <div id="patternEndWrapper">
-                <label class="form-label form-label-sm mb-1">終了時刻</label>
-                <select id="newPatternEnd" class="form-select form-select-sm" style="max-width:120px">
-                  <option value="10:00">10:00</option>
-                  <option value="11:00">11:00</option>
-                  <option value="12:00">12:00</option>
-                  <option value="13:00">13:00</option>
-                  <option value="14:00">14:00</option>
-                  <option value="15:00" selected>15:00</option>
-                  <option value="16:00">16:00</option>
-                  <option value="17:00">17:00</option>
-                  <option value="18:00">18:00</option>
-                  <option value="19:00">19:00</option>
-                </select>
+                <input type="text" id="newPatternName" class="form-control form-control-sm" placeholder="例: 午後不可" style="max-width:200px">
               </div>
               <button class="btn btn-sm btn-primary" id="addPatternBtn">追加</button>
             </div>
@@ -718,10 +691,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('filterAll').dispatchEvent(new Event('change'));
   });
 
-  document.getElementById('newPatternStart').addEventListener('change', function() {
-    document.getElementById('patternEndWrapper').style.display = this.value === 'allday' ? 'none' : '';
-  });
-
   document.getElementById('settingsModal').addEventListener('shown.bs.modal', () => {
     refreshSettingsAreaSelects();
     renderClientSettings();
@@ -743,6 +712,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('palette').addEventListener('change', () => {
     if (rawEvents.length > 0) calendar.refetchEvents();
+  });
+
+  document.getElementById('customPatternName').addEventListener('input', () => {
+    updateFooter();
+    calendar.refetchEvents();
   });
 
   loadAllData();
@@ -877,10 +851,10 @@ function showAlert(msg, onOk) {
   };
   customAlertModal.show();
 }
-function showConfirm(msg, onYes) {
+function showConfirm(msg, onYes, onNo) {
   document.getElementById('customConfirmMsg').textContent = msg;
   document.getElementById('customConfirmYes').onclick = () => { customConfirmModal.hide(); onYes(); };
-  document.getElementById('customConfirmNo').onclick  = () => customConfirmModal.hide();
+  document.getElementById('customConfirmNo').onclick  = () => { customConfirmModal.hide(); if (onNo) onNo(); };
   customConfirmModal.show();
 }
 
@@ -1121,25 +1095,29 @@ function buildPreviewEvents() {
   const clientObj = clients.find(c => c.name === inputModeClient) || {};
   const clientColor = (clientObj.color && clientObj.color !== '') ? clientObj.color : '#1565c0';
 
+  const customName = document.getElementById('customPatternName')
+    ? document.getElementById('customPatternName').value.trim() : '';
+
   selectionsByPattern.forEach((dateSet, patId) => {
     if (patId === '__delete__' || dateSet.size === 0) return;
-    const pattern = patterns.find(p => p.id === patId);
-    if (!pattern) return;
+
+    let eventTitle;
+    if (patId === '__custom__') {
+      eventTitle = customName || '自由入力';
+    } else {
+      const pattern = patterns.find(p => p.id === patId);
+      if (!pattern) return;
+      eventTitle = pattern.name;
+    }
 
     dateSet.forEach(dateStr => {
-      let start, end;
-      if (pattern.startTime === 'allday') {
-        start = dateStr;
-        const [y, m, day] = dateStr.split('-').map(Number);
-        const next = new Date(y, m - 1, day + 1);
-        end = localDateStr(next.getFullYear(), next.getMonth(), next.getDate());
-      } else {
-        start = dateStr + 'T' + pattern.startTime + ':00';
-        end   = dateStr + 'T' + (pattern.endTime || '18:00') + ':00';
-      }
+      const [y, m, day] = dateStr.split('-').map(Number);
+      const next = new Date(y, m - 1, day + 1);
+      const start = dateStr;
+      const end = localDateStr(next.getFullYear(), next.getMonth(), next.getDate());
       previews.push({
         id:              'preview_' + patId + '_' + dateStr,
-        title:           pattern.name,
+        title:           eventTitle,
         start, end,
         backgroundColor: clientColor,
         borderColor:     clientColor,
@@ -1182,10 +1160,28 @@ function buildPalette() {
     label.addEventListener('click', () => {
       document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
       label.classList.add('active');
+      document.getElementById('customNameWrapper').style.display = 'none';
       if (rawEvents.length > 0) calendar.refetchEvents();
     });
     container.appendChild(label);
   });
+
+  // 自由入力ボタン
+  const customLabel = document.createElement('label');
+  customLabel.className = 'palette-btn';
+  customLabel.innerHTML = `
+    <input type="radio" name="palette" value="__custom__" style="display:none">
+    <span class="palette-color-dot" style="background:${getPaletteClientColor()}"></span>
+    自由入力
+  `;
+  customLabel.addEventListener('click', () => {
+    document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
+    customLabel.classList.add('active');
+    document.getElementById('customNameWrapper').style.display = '';
+    document.getElementById('customPatternName').focus();
+    if (rawEvents.length > 0) calendar.refetchEvents();
+  });
+  container.appendChild(customLabel);
 
   const delLabel = document.createElement('label');
   delLabel.className = 'palette-btn';
@@ -1197,6 +1193,7 @@ function buildPalette() {
   delLabel.addEventListener('click', () => {
     document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
     delLabel.classList.add('active');
+    document.getElementById('customNameWrapper').style.display = 'none';
     if (rawEvents.length > 0) calendar.refetchEvents();
   });
   container.appendChild(delLabel);
@@ -1356,6 +1353,8 @@ function exitInputMode() {
 
   document.getElementById('inputToolbar').classList.add('d-none');
   document.getElementById('stickyFooter').classList.add('d-none');
+  document.getElementById('customNameWrapper').style.display = 'none';
+  document.getElementById('customPatternName').value = '';
   document.getElementById('stopInputBtn').classList.add('d-none');
   document.getElementById('stopInputBtnMobile').classList.add('d-none');
   hideInfoBar();
@@ -1427,9 +1426,12 @@ function updateFooter() {
   } else {
     footer.classList.remove('d-none');
     const parts = [];
+    const customName = document.getElementById('customPatternName')
+      ? document.getElementById('customPatternName').value.trim() : '';
     selectionsByPattern.forEach((set, patId) => {
       if (set.size === 0) return;
       if (patId === '__delete__') { parts.push(`削除 ${set.size}日`); return; }
+      if (patId === '__custom__') { parts.push((customName || '自由入力') + ' ' + set.size + '日'); return; }
       const pat = patterns.find(p => p.id === patId);
       parts.push((pat ? pat.name : '?') + ' ' + set.size + '日');
     });
@@ -1560,33 +1562,48 @@ function clearSelection() {
 function bulkRegister() {
   if (!inputModeClient || getTotalSelectedCount() === 0) return;
 
+  const customName = (document.getElementById('customPatternName')
+    ? document.getElementById('customPatternName').value.trim() : '') || '自由入力';
+
   const deleteDates = Array.from(selectionsByPattern.get('__delete__') || []).sort();
   const savePayloads = [];
   selectionsByPattern.forEach((dateSet, patId) => {
     if (patId === '__delete__' || dateSet.size === 0) return;
+    const isCustom = patId === '__custom__';
     savePayloads.push({
       clientName: inputModeClient,
-      entries: Array.from(dateSet).sort().map(date => ({ date, patternId: patId }))
+      entries: Array.from(dateSet).sort().map(date => ({
+        date,
+        patternId: patId,
+        ...(isCustom ? { name: customName } : {})
+      }))
     });
   });
 
   if (savePayloads.length === 0 && deleteDates.length === 0) return;
 
+  // 自由入力が含まれていて名前が未入力なら警告
+  const hasCustom = selectionsByPattern.has('__custom__') && (selectionsByPattern.get('__custom__') || new Set()).size > 0;
+  if (hasCustom && customName === '自由入力' && !document.getElementById('customPatternName').value.trim()) {
+    if (!confirm('イベント名が未入力です。「自由入力」という名前で登録しますか？')) return;
+  }
+
   const lines = [];
   savePayloads.forEach(p => {
-    const pat = patterns.find(x => x.id === p.entries[0].patternId);
-    lines.push(`・${pat ? pat.name : '?'} → ${p.entries.length}日`);
+    const patId = p.entries[0].patternId;
+    const displayName = patId === '__custom__' ? customName : (patterns.find(x => x.id === patId) || {}).name || '?';
+    lines.push(`・${displayName} → ${p.entries.length}日`);
   });
   if (deleteDates.length > 0) lines.push(`・削除 → ${deleteDates.length}日`);
   const clientForBulk = inputModeClient;
 
   showConfirm(
     `${clientForBulk} に以下の内容を登録しますか？\n${lines.join('\n')}`,
-    () => _executeBulkRegister(clientForBulk, deleteDates, savePayloads)
+    () => _executeBulkRegister(clientForBulk, deleteDates, savePayloads, hasCustom ? customName : null)
   );
 }
 
-function _executeBulkRegister(clientName, deleteDates, savePayloads) {
+function _executeBulkRegister(clientName, deleteDates, savePayloads, customPatternName) {
   showLoading(true);
 
   const doNextSave = (idx, totalAdded, totalSkipped) => {
@@ -1595,7 +1612,20 @@ function _executeBulkRegister(clientName, deleteDates, savePayloads) {
       exitInputMode();
       reloadEvents();
       const msg = `登録完了！${totalAdded}件追加${totalSkipped > 0 ? '\n（' + totalSkipped + '件は重複スキップ）' : ''}`;
-      showAlert(msg);
+      if (customPatternName) {
+        showConfirm(
+          `${msg}\n\n「${customPatternName}」をパターンとして保存しますか？`,
+          () => {
+            google.script.run
+              .withSuccessHandler(() => reloadPatterns())
+              .withFailureHandler(handleError)
+              .addPattern({ name: customPatternName, color: '#6c757d' });
+          },
+          () => showAlert(msg)
+        );
+      } else {
+        showAlert(msg);
+      }
       return;
     }
     google.script.run
@@ -1915,9 +1945,8 @@ function renderPatternSettings() {
   container.innerHTML = patterns.map(p => `
     <div class="settings-item">
       <div class="item-name">${escHtml(p.name)}</div>
-      <div class="item-meta">${p.startTime === 'allday' ? '終日' : escHtml(p.startTime) + '〜' + escHtml(p.endTime)}</div>
       <button class="btn btn-xs btn-outline-secondary btn-sm ms-2" style="padding:2px 8px;font-size:0.75rem"
-        onclick="editPatternModal('${escHtml(p.id)}','${escHtml(p.name)}','${escHtml(p.startTime)}','${escHtml(p.endTime)}','${escHtml(p.color)}',${p.order})">編集</button>
+        onclick="editPatternModal('${escHtml(p.id)}','${escHtml(p.name)}','${escHtml(p.color)}',${p.order})">編集</button>
       <button class="btn btn-xs btn-outline-danger btn-sm ms-1" style="padding:2px 8px;font-size:0.75rem"
         onclick="deletePatternConfirm('${escHtml(p.id)}','${escHtml(p.name)}')">削除</button>
     </div>
@@ -1927,9 +1956,7 @@ function renderPatternSettings() {
 function handleAddPattern() {
   const name = document.getElementById('newPatternName').value.trim();
   if (!name) { showAlert('パターン名を入力してください'); return; }
-  const startTime = document.getElementById('newPatternStart').value;
-  const endTime   = startTime === 'allday' ? '' : document.getElementById('newPatternEnd').value;
-  const color     = '#6c757d'; // パターン色は固定（得意先色を使用するため）
+  const color = '#6c757d';
   showLoading(true);
   google.script.run
     .withSuccessHandler(result => {
@@ -1940,38 +1967,20 @@ function handleAddPattern() {
       } else { showAlert('追加エラー: ' + result.message); }
     })
     .withFailureHandler(handleError)
-    .addPattern({ name, startTime, endTime, color });
+    .addPattern({ name, color });
 }
 
-function editPatternModal(id, name, startTime, endTime, color, order) {
-  const isAllday = startTime === 'allday';
+function editPatternModal(id, name, color, order) {
   document.getElementById('editModalTitle').textContent = 'パターンを編集';
   document.getElementById('editModalBody').innerHTML = `
     <div class="mb-2"><label class="form-label form-label-sm">パターン名</label>
       <input type="text" id="ep_name" class="form-control form-control-sm" value="${escHtml(name)}"></div>
-    <div class="mb-2"><label class="form-label form-label-sm">開始時刻</label>
-      <select id="ep_start" class="form-select form-select-sm">
-        ${['allday','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00']
-          .map(v => `<option value="${v}" ${v===startTime?'selected':''}>${v==='allday'?'終日':v}</option>`).join('')}
-      </select></div>
-    <div class="mb-2" id="ep_end_wrap" ${isAllday?'style="display:none"':''}>
-      <label class="form-label form-label-sm">終了時刻</label>
-      <select id="ep_end" class="form-select form-select-sm">
-        ${['09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00']
-          .map(v => `<option value="${v}" ${v===endTime?'selected':''}>${v}</option>`).join('')}
-      </select></div>
     <div><label class="form-label form-label-sm">並び順</label>
       <input type="number" id="ep_order" class="form-control form-control-sm" value="${order}" style="width:80px"></div>
   `;
-  document.getElementById('ep_start').addEventListener('change', function() {
-    document.getElementById('ep_end_wrap').style.display = this.value === 'allday' ? 'none' : '';
-  });
   document.getElementById('editModalSaveBtn').onclick = () => {
     const newName = document.getElementById('ep_name').value.trim();
     if (!newName) { showAlert('パターン名を入力してください'); return; }
-    const newStart = document.getElementById('ep_start').value;
-    const newEnd   = newStart === 'allday' ? '' : document.getElementById('ep_end').value;
-    const newColor = color; // 色はそのまま保持
     const newOrder = parseInt(document.getElementById('ep_order').value) || order;
     showLoading(true);
     google.script.run
@@ -1982,7 +1991,7 @@ function editPatternModal(id, name, startTime, endTime, color, order) {
         else showAlert('更新エラー: ' + result.message);
       })
       .withFailureHandler(handleError)
-      .updatePattern({ id, name: newName, startTime: newStart, endTime: newEnd, color: newColor, order: newOrder });
+      .updatePattern({ id, name: newName, color, order: newOrder });
   };
   editModalBS.show();
 }
