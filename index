@@ -315,9 +315,10 @@
         <button id="exitInputModeBtn" title="入力モードを終了">✕</button>
       </div>
       <div id="palette"><!-- JS で動的生成 --></div>
-      <div id="customNameWrapper" style="display:none; margin-bottom:6px;">
+      <div id="customNameWrapper" style="display:flex; gap:4px; align-items:center; margin-bottom:6px;">
         <input type="text" id="customPatternName" class="form-control form-control-sm"
-          placeholder="イベント名を入力" style="max-width:220px; display:inline-block;">
+          placeholder="自由入力のイベント名" style="max-width:180px;">
+        <button type="button" id="addCustomPatternBtn" class="btn btn-sm btn-outline-secondary">＋追加</button>
       </div>
       <div id="bulkActions">
         <button id="selectWeekendsBtn">🗓 土日を全選択</button>
@@ -553,6 +554,7 @@ let currentUser    = null;         // 現在のユーザー情報
 let activeAreaId   = '__all__';    // 選択中のエリアID（'__all__' = 全て）
 let clientRules    = {};           // {name: ルール文字列}
 let patterns       = [];           // 入力パターン [{id,name,startTime,endTime,color,order}]
+let customPatterns = [];           // 入力モード中に追加した一時パターン [{id,name}]
 let checkedClients = new Set();    // 表示フィルターでチェック済みの会社名
 let inputModeClient = null;            // 入力モード中の会社名（null=通常モード）
 let selectionsByPattern = new Map();   // Map<patternId, Set<dateStr>>
@@ -714,9 +716,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (rawEvents.length > 0) calendar.refetchEvents();
   });
 
-  document.getElementById('customPatternName').addEventListener('input', () => {
-    updateFooter();
-    calendar.refetchEvents();
+  document.getElementById('addCustomPatternBtn').addEventListener('click', addCustomPattern);
+  document.getElementById('customPatternName').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); addCustomPattern(); }
   });
 
   loadAllData();
@@ -1095,15 +1097,13 @@ function buildPreviewEvents() {
   const clientObj = clients.find(c => c.name === inputModeClient) || {};
   const clientColor = (clientObj.color && clientObj.color !== '') ? clientObj.color : '#1565c0';
 
-  const customName = document.getElementById('customPatternName')
-    ? document.getElementById('customPatternName').value.trim() : '';
-
   selectionsByPattern.forEach((dateSet, patId) => {
     if (patId === '__delete__' || dateSet.size === 0) return;
 
     let eventTitle;
-    if (patId === '__custom__') {
-      eventTitle = customName || '自由入力';
+    const cp = customPatterns.find(p => p.id === patId);
+    if (cp) {
+      eventTitle = cp.name;
     } else {
       const pattern = patterns.find(p => p.id === patId);
       if (!pattern) return;
@@ -1166,22 +1166,30 @@ function buildPalette() {
     container.appendChild(label);
   });
 
-  // 自由入力ボタン
-  const customLabel = document.createElement('label');
-  customLabel.className = 'palette-btn';
-  customLabel.innerHTML = `
-    <input type="radio" name="palette" value="__custom__" style="display:none">
-    <span class="palette-color-dot" style="background:${getPaletteClientColor()}"></span>
-    自由入力
-  `;
-  customLabel.addEventListener('click', () => {
-    document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
-    customLabel.classList.add('active');
-    document.getElementById('customNameWrapper').style.display = '';
-    document.getElementById('customPatternName').focus();
-    if (rawEvents.length > 0) calendar.refetchEvents();
+  // 一時パターン（自由入力で追加したもの）
+  customPatterns.forEach(cp => {
+    const dotColor = getPaletteClientColor();
+    const cpLabel = document.createElement('label');
+    cpLabel.className = 'palette-btn';
+    cpLabel.dataset.customId = cp.id;
+    cpLabel.innerHTML = `
+      <input type="radio" name="palette" value="${escHtml(cp.id)}" style="display:none">
+      <span class="palette-color-dot" style="background:${escHtml(dotColor)}"></span>
+      ${escHtml(cp.name)}
+      <span class="custom-pattern-remove" data-id="${escHtml(cp.id)}" title="削除" style="margin-left:4px;opacity:0.55;font-size:0.8em;line-height:1;">✕</span>
+    `;
+    cpLabel.querySelector('input').addEventListener('change', () => {
+      document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
+      cpLabel.classList.add('active');
+      if (rawEvents.length > 0) calendar.refetchEvents();
+    });
+    cpLabel.querySelector('.custom-pattern-remove').addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      removeCustomPattern(cp.id);
+    });
+    container.appendChild(cpLabel);
   });
-  container.appendChild(customLabel);
 
   const delLabel = document.createElement('label');
   delLabel.className = 'palette-btn';
@@ -1193,10 +1201,35 @@ function buildPalette() {
   delLabel.addEventListener('click', () => {
     document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
     delLabel.classList.add('active');
-    document.getElementById('customNameWrapper').style.display = 'none';
     if (rawEvents.length > 0) calendar.refetchEvents();
   });
   container.appendChild(delLabel);
+}
+
+function addCustomPattern() {
+  const name = document.getElementById('customPatternName').value.trim();
+  if (!name) { document.getElementById('customPatternName').focus(); return; }
+  const id = '__custom_' + Date.now() + '__';
+  customPatterns.push({ id, name });
+  document.getElementById('customPatternName').value = '';
+  buildPalette();
+  // 追加した一時パターンを自動選択
+  const radio = document.querySelector(`input[name="palette"][value="${CSS.escape(id)}"]`);
+  if (radio) {
+    radio.checked = true;
+    document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
+    radio.closest('.palette-btn').classList.add('active');
+  }
+  updateFooter();
+  calendar.refetchEvents();
+}
+
+function removeCustomPattern(id) {
+  customPatterns = customPatterns.filter(p => p.id !== id);
+  selectionsByPattern.delete(id);
+  buildPalette();
+  updateFooter();
+  calendar.refetchEvents();
 }
 
 // =====================================================================
@@ -1351,9 +1384,9 @@ function exitInputMode() {
   draggedDates.clear();
   wasDragging = false;
 
+  customPatterns = [];
   document.getElementById('inputToolbar').classList.add('d-none');
   document.getElementById('stickyFooter').classList.add('d-none');
-  document.getElementById('customNameWrapper').style.display = 'none';
   document.getElementById('customPatternName').value = '';
   document.getElementById('stopInputBtn').classList.add('d-none');
   document.getElementById('stopInputBtnMobile').classList.add('d-none');
@@ -1426,12 +1459,11 @@ function updateFooter() {
   } else {
     footer.classList.remove('d-none');
     const parts = [];
-    const customName = document.getElementById('customPatternName')
-      ? document.getElementById('customPatternName').value.trim() : '';
     selectionsByPattern.forEach((set, patId) => {
       if (set.size === 0) return;
       if (patId === '__delete__') { parts.push(`削除 ${set.size}日`); return; }
-      if (patId === '__custom__') { parts.push((customName || '自由入力') + ' ' + set.size + '日'); return; }
+      const cp = customPatterns.find(p => p.id === patId);
+      if (cp) { parts.push(cp.name + ' ' + set.size + '日'); return; }
       const pat = patterns.find(p => p.id === patId);
       parts.push((pat ? pat.name : '?') + ' ' + set.size + '日');
     });
@@ -1562,48 +1594,45 @@ function clearSelection() {
 function bulkRegister() {
   if (!inputModeClient || getTotalSelectedCount() === 0) return;
 
-  const customName = (document.getElementById('customPatternName')
-    ? document.getElementById('customPatternName').value.trim() : '') || '自由入力';
-
   const deleteDates = Array.from(selectionsByPattern.get('__delete__') || []).sort();
   const savePayloads = [];
   selectionsByPattern.forEach((dateSet, patId) => {
     if (patId === '__delete__' || dateSet.size === 0) return;
-    const isCustom = patId === '__custom__';
+    const cp = customPatterns.find(p => p.id === patId);
     savePayloads.push({
       clientName: inputModeClient,
       entries: Array.from(dateSet).sort().map(date => ({
         date,
         patternId: patId,
-        ...(isCustom ? { name: customName } : {})
+        ...(cp ? { name: cp.name } : {})
       }))
     });
   });
 
   if (savePayloads.length === 0 && deleteDates.length === 0) return;
 
-  // 自由入力が含まれていて名前が未入力なら警告
-  const hasCustom = selectionsByPattern.has('__custom__') && (selectionsByPattern.get('__custom__') || new Set()).size > 0;
-  if (hasCustom && customName === '自由入力' && !document.getElementById('customPatternName').value.trim()) {
-    if (!confirm('イベント名が未入力です。「自由入力」という名前で登録しますか？')) return;
-  }
-
   const lines = [];
   savePayloads.forEach(p => {
     const patId = p.entries[0].patternId;
-    const displayName = patId === '__custom__' ? customName : (patterns.find(x => x.id === patId) || {}).name || '?';
+    const cp = customPatterns.find(x => x.id === patId);
+    const displayName = cp ? cp.name : (patterns.find(x => x.id === patId) || {}).name || '?';
     lines.push(`・${displayName} → ${p.entries.length}日`);
   });
   if (deleteDates.length > 0) lines.push(`・削除 → ${deleteDates.length}日`);
   const clientForBulk = inputModeClient;
 
+  // 登録後に保存確認が必要な一時パターン名を収集
+  const usedCustomNames = customPatterns
+    .filter(cp => (selectionsByPattern.get(cp.id) || new Set()).size > 0)
+    .map(cp => cp.name);
+
   showConfirm(
     `${clientForBulk} に以下の内容を登録しますか？\n${lines.join('\n')}`,
-    () => _executeBulkRegister(clientForBulk, deleteDates, savePayloads, hasCustom ? customName : null)
+    () => _executeBulkRegister(clientForBulk, deleteDates, savePayloads, usedCustomNames)
   );
 }
 
-function _executeBulkRegister(clientName, deleteDates, savePayloads, customPatternName) {
+function _executeBulkRegister(clientName, deleteDates, savePayloads, usedCustomNames) {
   showLoading(true);
 
   const doNextSave = (idx, totalAdded, totalSkipped) => {
@@ -1612,17 +1641,8 @@ function _executeBulkRegister(clientName, deleteDates, savePayloads, customPatte
       exitInputMode();
       reloadEvents();
       const msg = `登録完了！${totalAdded}件追加${totalSkipped > 0 ? '\n（' + totalSkipped + '件は重複スキップ）' : ''}`;
-      if (customPatternName) {
-        showConfirm(
-          `${msg}\n\n「${customPatternName}」をパターンとして保存しますか？`,
-          () => {
-            google.script.run
-              .withSuccessHandler(() => reloadPatterns())
-              .withFailureHandler(handleError)
-              .addPattern({ name: customPatternName, color: '#6c757d' });
-          },
-          () => showAlert(msg)
-        );
+      if (usedCustomNames && usedCustomNames.length > 0) {
+        _askSaveCustomPattern(msg, usedCustomNames, 0);
       } else {
         showAlert(msg);
       }
@@ -1656,6 +1676,28 @@ function _executeBulkRegister(clientName, deleteDates, savePayloads, customPatte
   } else {
     doNextSave(0, 0, 0);
   }
+}
+
+// 自由入力パターンを順番にパターン保存確認するヘルパー
+function _askSaveCustomPattern(completionMsg, names, idx) {
+  if (idx >= names.length) {
+    showAlert(completionMsg);
+    return;
+  }
+  const name = names[idx];
+  showConfirm(
+    (idx === 0 ? completionMsg + '\n\n' : '') + `「${name}」をパターンとして保存しますか？`,
+    () => {
+      google.script.run
+        .withSuccessHandler(() => {
+          reloadPatterns();
+          _askSaveCustomPattern(completionMsg, names, idx + 1);
+        })
+        .withFailureHandler(handleError)
+        .addPattern({ name, color: '#6c757d' });
+    },
+    () => _askSaveCustomPattern(completionMsg, names, idx + 1)
+  );
 }
 
 // =====================================================================
