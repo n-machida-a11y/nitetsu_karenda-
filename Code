@@ -1,199 +1,663 @@
-// 固定IDの指定を削除し、常に「このスプレッドシート」を参照するように修正
-const SHEET_NAME = 'Holidays';
-const RULE_SHEET_NAME = 'Rules'; // ★変更: ルール管理用シート名
+  // =====================================================================
+  // シート名定数
+  // =====================================================================
+  const SHEET_NAME         = 'Holidays';
+  const CLIENT_SHEET_NAME  = 'Clients';
+  const PATTERN_SHEET_NAME = 'Patterns';
+  const AREA_SHEET_NAME    = 'Areas';
+  const USER_SHEET_NAME    = 'Users';
 
-/**
- * Webアプリにアクセスした際にHTMLを返す
- */
-function doGet(e) {
-  return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('得意先お休み管理カレンダー')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-}
-
-/**
- * 日本の祝日を取得する
- */
-function getJapaneseHolidays() {
-  try {
-    const calendarId = 'ja.japanese#holiday@group.v.calendar.google.com';
-    const calendar = CalendarApp.getCalendarById(calendarId);
-    const now = new Date();
-    const startTime = new Date(now.getFullYear() - 1, 0, 1);
-    const endTime = new Date(now.getFullYear() + 1, 11, 31);
-    const events = calendar.getEvents(startTime, endTime);
-    
-    return events.map(event => ({
-      title: event.getTitle(),
-      start: Utilities.formatDate(event.getStartTime(), 'JST', 'yyyy-MM-dd'),
-      allDay: true,
-      display: 'background',
-      backgroundColor: '#fff0f0',
-      extendedProps: { isHoliday: true }
-    }));
-  } catch (e) {
-    console.warn('祝日取得エラー', e);
-    return [];
+  // =====================================================================
+  // Web アプリのエントリポイント
+  // =====================================================================
+  function doGet(e) {
+    return HtmlService.createHtmlOutputFromFile('index')
+      .setTitle('得意先お休み管理カレンダー')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
-}
 
-/**
- * 得意先名に基づいて一貫した色を生成する
- */
-function getClientColor(clientName) {
-  if (!clientName) return '#6c757d';
-  let hash = 0;
-  for (let i = 0; i < clientName.length; i++) {
-    hash = clientName.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = Math.abs(hash % 360);
-  return `hsl(${hue}, 75%, 50%)`;
-}
-
-/**
- * スプレッドシートから休日の予定を取得して返す
- */
-function getHolidays() {
-  try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-    if (!sheet) {
-      console.warn(`シート「${SHEET_NAME}」が見つかりません。`);
+  // =====================================================================
+  // 日本の祝日取得
+  // =====================================================================
+  function getJapaneseHolidays() {
+    try {
+      const calendarId = 'ja.japanese#holiday@group.v.calendar.google.com';
+      const cal = CalendarApp.getCalendarById(calendarId);
+      const now = new Date();
+      const events = cal.getEvents(
+        new Date(now.getFullYear() - 1, 0, 1),
+        new Date(now.getFullYear() + 1, 11, 31)
+      );
+      return events.map(ev => ({
+        title: ev.getTitle(),
+        start: Utilities.formatDate(ev.getStartTime(), 'JST', 'yyyy-MM-dd'),
+        allDay: true,
+        display: 'background',
+        backgroundColor: '#fff0f0',
+        extendedProps: { isHoliday: true }
+      }));
+    } catch (e) {
+      console.warn('祝日取得エラー', e);
       return [];
     }
+  }
 
-    let holidays = [];
-    const lastRow = sheet.getLastRow();
-    
-    if (lastRow >= 2) {
-      const data = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
-      holidays = data.map(row => {
-        if (!row[0]) return null;
-        const formatDate = (d) => {
-          if (!d) return null;
-          const dateObj = new Date(d);
-          if (isNaN(dateObj.getTime())) return null;
-          return Utilities.formatDate(dateObj, 'JST', 'yyyy-MM-dd');
-        };
+  // =====================================================================
+  // ユーティリティ
+  // =====================================================================
 
-        return {
-          id: row[0],
-          title: row[1],
-          start: formatDate(row[2]),
-          end: formatDate(row[3]),
-          extendedProps: { clientName: row[4] },
-          backgroundColor: row[6] || row[5] || getClientColor(row[4]),
-          borderColor: row[6] || row[5] || getClientColor(row[4])
-        };
-      }).filter(item => item);
+  /** 会社名ハッシュから一貫した色を生成 */
+  function getClientColor(clientName) {
+    if (!clientName) return '#6c757d';
+    let hash = 0;
+    for (let i = 0; i < clientName.length; i++) {
+      hash = clientName.charCodeAt(i) + ((hash << 5) - hash);
     }
-    
-    const jpHolidays = getJapaneseHolidays();
-    return [...holidays, ...jpHolidays];
-    
-  } catch (e) {
-    throw new Error('データの取得に失敗しました: ' + e.message);
+    return `hsl(${Math.abs(hash % 360)}, 70%, 45%)`;
   }
-}
 
-/**
- * ★追加: 会社ごとのルールを取得する
- * 戻り値: { "A社": "ルール内容...", "B社": "ルール内容..." } の形式
- */
-function getClientRules() {
-  try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RULE_SHEET_NAME);
-    if (!sheet) return {};
-
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 2) return {};
-
-    // A列:会社名, B列:ルール
-    const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
-    const rules = {};
-    
-    data.forEach(row => {
-      const name = row[0];
-      const rule = row[1];
-      if (name && rule) {
-        rules[name] = rule;
-      }
-    });
-    
-    return rules;
-  } catch (e) {
-    console.error('ルール取得エラー', e);
-    return {};
-  }
-}
-
-function addHoliday(event) {
-  try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-    const newId = Utilities.getUuid();
-    const clientName = event.extendedProps ? event.extendedProps.clientName : '';
-    const color = getClientColor(clientName);
-    const startDateObj = new Date(event.start);
-    const endDateObj = event.end ? new Date(event.end) : new Date(startDateObj.getTime() + 24 * 60 * 60 * 1000);
-    sheet.appendRow([newId, event.title, startDateObj, endDateObj, clientName, "", color]);
-    return { status: 'success', id: newId };
-  } catch (e) {
-    return { status: 'error', message: e.toString() };
-  }
-}
-
-function updateHoliday(event) {
-  try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-    for (let i = 0; i < data.length; i++) {
-      if (data[i][0] == event.id) {
-        const rowNum = i + 2;
-        const clientName = event.extendedProps ? event.extendedProps.clientName : '';
-        const color = getClientColor(clientName);
-        const startDateObj = new Date(event.start);
-        const endDateObj = event.end ? new Date(event.end) : new Date(startDateObj.getTime() + 24 * 60 * 60 * 1000);
-        sheet.getRange(rowNum, 2, 1, 6).setValues([[event.title, startDateObj, endDateObj, clientName, "", color]]);
-        return { status: 'success' };
-      }
+  /**
+  * Date → FullCalendar 用文字列
+  * JST 00:00:00 → 'yyyy-MM-dd'
+  * その他       → 'yyyy-MM-ddTHH:mm:ss+09:00'
+  */
+  function formatEventDate_(d) {
+    if (!d) return null;
+    const obj = new Date(d);
+    if (isNaN(obj.getTime())) return null;
+    const t = Utilities.formatDate(obj, 'JST', 'HH:mm:ss');
+    if (t === '00:00:00') {
+      return Utilities.formatDate(obj, 'JST', 'yyyy-MM-dd');
     }
-    return { status: 'error', message: 'Event not found' };
-  } catch (e) {
-    return { status: 'error', message: e.toString() };
+    return Utilities.formatDate(obj, 'JST', "yyyy-MM-dd'T'HH:mm:ss") + '+09:00';
   }
-}
 
-function deleteHoliday(eventId) {
-  try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-    const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
-    for (let i = 0; i < data.length; i++) {
-      if (data[i][0] == eventId) {
-        sheet.deleteRow(i + 2);
-        return { status: 'success' };
-      }
+  /** シートを取得、なければ新規作成してヘッダーを入れる */
+  function getOrCreateSheet_(name, headers) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(name);
+    if (!sheet) {
+      sheet = ss.insertSheet(name);
+      sheet.appendRow(headers);
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
     }
-    return { status: 'error', message: 'Event not found' };
-  } catch (e) {
-    return { status: 'error', message: e.toString() };
+    return sheet;
   }
-}
 
-function checkAndSendNotifications() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const oneWeekLater = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const holidays = getHolidays().filter(h => !h.extendedProps.isHoliday);
-  const upcoming = holidays.filter(h => {
-    const s = new Date(h.start);
-    return s >= today && s < oneWeekLater;
-  });
-  if (upcoming.length > 0) {
-    let body = '直近1週間の得意先お休み情報です。\n\n';
-    upcoming.sort((a, b) => new Date(a.start) - new Date(b.start));
-    upcoming.forEach(h => {
-      const s = new Date(h.start);
-      body += `・${s.getMonth() + 1}/${s.getDate()} (${h.extendedProps.clientName || '未設定'}) - ${h.title}\n`;
-    });
-    MailApp.sendEmail(Session.getActiveUser().getEmail(), '【通知】得意先お休み情報', body);
+  // =====================================================================
+  // 現在のユーザー情報取得
+  // =====================================================================
+  function getCurrentUserInfo() {
+    try {
+      const email = Session.getActiveUser().getEmail();
+      const users = getUsers();
+      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (user) return { id: user.id, name: user.name, email: user.email, isAdmin: user.isAdmin, viewableAreas: user.viewableAreas, editableAreas: user.editableAreas };
+      // 未登録ユーザーは閲覧のみ
+      return { id: '', name: '', email: email, isAdmin: false, viewableAreas: '', editableAreas: '' };
+    } catch (e) {
+      return { id: '', name: '', email: '', isAdmin: false, viewableAreas: '', editableAreas: '' };
+    }
   }
-}
+
+  // =====================================================================
+  // エリアマスター管理
+  // =====================================================================
+  function getAreas() {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(AREA_SHEET_NAME);
+      if (!sheet || sheet.getLastRow() < 2) return [];
+      return sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues()
+        .filter(r => r[0])
+        .map(r => ({ id: String(r[0]), name: String(r[1]) }));
+    } catch (e) {
+      console.error('getAreas error', e);
+      return [];
+    }
+  }
+
+  function addArea(data) {
+    try {
+      const sheet = getOrCreateSheet_(AREA_SHEET_NAME, ['ID', 'エリア名']);
+      const id = Utilities.getUuid();
+      sheet.appendRow([id, data.name]);
+      return { status: 'success', id };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function updateArea(data) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(AREA_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'error', message: '見つかりません' };
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]) === String(data.id)) {
+          sheet.getRange(i + 2, 2).setValue(data.name);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function deleteArea(id) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(AREA_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'error', message: '見つかりません' };
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = ids.length - 1; i >= 0; i--) {
+        if (String(ids[i][0]) === String(id)) {
+          sheet.deleteRow(i + 2);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  // =====================================================================
+  // ユーザー・権限管理
+  // =====================================================================
+  function getUsers() {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USER_SHEET_NAME);
+      if (!sheet || sheet.getLastRow() < 2) return [];
+      const cols = Math.min(6, Math.max(3, sheet.getLastColumn()));
+      return sheet.getRange(2, 1, sheet.getLastRow() - 1, cols).getValues()
+        .filter(r => r[0])
+        .map(r => ({
+          id:            String(r[0]),
+          name:          String(r[1]),
+          email:         String(r[2] || ''),
+          isAdmin:       r[3] === true || r[3] === 'true' || r[3] === 'TRUE',
+          viewableAreas: String(r[4] || ''),  // カンマ区切りエリアID、空=全エリア表示
+          editableAreas: String(r[5] || '')   // カンマ区切りエリアID、空=編集不可
+        }));
+    } catch (e) {
+      console.error('getUsers error', e);
+      return [];
+    }
+  }
+
+  function addUser(data) {
+    try {
+      const sheet = getOrCreateSheet_(USER_SHEET_NAME, ['ID', '名前', 'メールアドレス', '管理者', '表示エリアID', '編集エリアID']);
+      const id = Utilities.getUuid();
+      sheet.appendRow([id, data.name, data.email || '', data.isAdmin ? true : false, data.viewableAreas || '', data.editableAreas || '']);
+      return { status: 'success', id };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function updateUser(data) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USER_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'error', message: '見つかりません' };
+      if (sheet.getLastColumn() < 4) sheet.getRange(1, 4).setValue('管理者');
+      if (sheet.getLastColumn() < 5) sheet.getRange(1, 5).setValue('表示エリアID');
+      if (sheet.getLastColumn() < 6) sheet.getRange(1, 6).setValue('編集エリアID');
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]) === String(data.id)) {
+          sheet.getRange(i + 2, 2, 1, 5).setValues([[
+            data.name, data.email || '', data.isAdmin ? true : false,
+            data.viewableAreas || '', data.editableAreas || ''
+          ]]);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function deleteUser(id) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(USER_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'error', message: '見つかりません' };
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = ids.length - 1; i >= 0; i--) {
+        if (String(ids[i][0]) === String(id)) {
+          sheet.deleteRow(i + 2);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  // =====================================================================
+  // 休日イベント取得（得意先色対応版）
+  // =====================================================================
+  function getHolidays() {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+      if (!sheet) return [];
+
+      // クライアントの色マップを作成（設定色 > 自動生成色）
+      const clientColorMap = {};
+      getClients().forEach(c => {
+        const trimmedColor = c.color.trim();
+        clientColorMap[c.name] = trimmedColor !== '' ? trimmedColor : getClientColor(c.name);
+      });
+
+      let holidays = [];
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        const data = sheet.getRange(2, 1, lastRow - 1, 7).getValues();
+        holidays = data.map(row => {
+          if (!row[0]) return null;
+          const startStr = formatEventDate_(row[2]);
+          const endStr   = formatEventDate_(row[3]);
+          if (!startStr) return null;
+          const clientName = String(row[4] || '');
+          // 優先順位: Clients設定色 > HolidaysシートG列の保存色 > ハッシュ自動生成色
+          const savedColor = String(row[6] || '').trim();
+          const color = clientColorMap[clientName] || (savedColor !== '' ? savedColor : getClientColor(clientName));
+          return {
+            id:              String(row[0]),
+            title:           String(row[1]),
+            start:           startStr,
+            end:             endStr,
+            extendedProps:   { clientName },
+            backgroundColor: color,
+            borderColor:     color
+          };
+        }).filter(Boolean);
+      }
+      return [...holidays, ...getJapaneseHolidays()];
+    } catch (e) {
+      throw new Error('データの取得に失敗しました: ' + e.message);
+    }
+  }
+
+  // =====================================================================
+  // 会社マスター管理（エリア・色フィールド対応）
+  // =====================================================================
+
+  function getClients() {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CLIENT_SHEET_NAME);
+      if (!sheet || sheet.getLastRow() < 2) return [];
+      const lastCol = sheet.getLastColumn();
+      const cols = Math.min(5, Math.max(3, lastCol));
+      return sheet.getRange(2, 1, sheet.getLastRow() - 1, cols).getValues()
+        .filter(r => r[0])
+        .map(r => ({
+          id:     String(r[0]),
+          name:   String(r[1]),
+          memo:   String(r[2] || ''),
+          areaId: String(r[3] || ''),
+          color:  String(r[4] || '').trim()
+        }));
+    } catch (e) {
+      console.error('getClients error', e);
+      return [];
+    }
+  }
+
+  function addClient(data) {
+    try {
+      const sheet = getOrCreateSheet_(CLIENT_SHEET_NAME, ['ID', '会社名', '備考', 'エリアID', '色']);
+      const id = Utilities.getUuid();
+      sheet.appendRow([id, data.name, data.memo || '', data.areaId || '', data.color || '']);
+      return { status: 'success', id };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function updateClient(data) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CLIENT_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'error', message: '見つかりません' };
+      // 列数が足りない場合はヘッダーを拡張
+      const lastCol = sheet.getLastColumn();
+      if (lastCol < 4) sheet.getRange(1, 4).setValue('エリアID');
+      if (lastCol < 5) sheet.getRange(1, 5).setValue('色');
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]) === String(data.id)) {
+          sheet.getRange(i + 2, 2, 1, 4).setValues([[
+            data.name, data.memo || '', data.areaId || '', data.color || ''
+          ]]);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function deleteClient(id) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CLIENT_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'error', message: '見つかりません' };
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = ids.length - 1; i >= 0; i--) {
+        if (String(ids[i][0]) === String(id)) {
+          sheet.deleteRow(i + 2);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  // =====================================================================
+  // 入力パターン管理
+  // =====================================================================
+
+  /**
+  * Sheets が 'HH:mm' を時刻型に自動変換することがあるため、
+  * セル値（文字列 / Date / 数値）を安全に 'HH:mm' または 'allday' に変換する
+  */
+  function timeFromCell_(val) {
+    if (val === null || val === undefined || val === '') return 'allday';
+    if (typeof val === 'string') {
+      const s = val.trim();
+      return s === '' ? 'allday' : s;
+    }
+    if (val instanceof Date) {
+      return Utilities.formatDate(val, 'JST', 'HH:mm');
+    }
+    if (typeof val === 'number') {
+      const totalMins = Math.round(val * 24 * 60);
+      return String(Math.floor(totalMins / 60)).padStart(2, '0') + ':' + String(totalMins % 60).padStart(2, '0');
+    }
+    return String(val);
+  }
+
+  function getPatterns() {
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const sheet = ss.getSheetByName(PATTERN_SHEET_NAME);
+      if (!sheet) return initDefaultPatterns_().patterns;
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return [];
+      return sheet.getRange(2, 1, lastRow - 1, 6).getValues()
+        .filter(r => r[0])
+        .map(r => {
+          const st = timeFromCell_(r[2]);
+          const et = timeFromCell_(r[3]);
+          return {
+            id:        String(r[0]),
+            name:      String(r[1]),
+            startTime: st,
+            endTime:   (et === 'allday' ? '' : et),
+            color:     String(r[4] || '#6c757d'),
+            order:     Number(r[5]) || 99
+          };
+        })
+        .sort((a, b) => a.order - b.order);
+    } catch (e) {
+      console.error('getPatterns error', e);
+      return [];
+    }
+  }
+
+  function addPattern(data) {
+    try {
+      const sheet = getOrCreateSheet_(PATTERN_SHEET_NAME, ['ID', '名前', '開始時刻', '終了時刻', '色', '並び順']);
+      const id = Utilities.getUuid();
+      const order = (data.order != null) ? Number(data.order) : sheet.getLastRow();
+      const nextRow = sheet.getLastRow() + 1;
+      sheet.getRange(nextRow, 3, 1, 2).setNumberFormat('@');
+      sheet.getRange(nextRow, 1, 1, 6).setValues([[id, data.name, data.startTime, data.endTime || '', data.color || '#6c757d', order]]);
+      return { status: 'success', id };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function updatePattern(data) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PATTERN_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'error', message: '見つかりません' };
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]) === String(data.id)) {
+          sheet.getRange(i + 2, 3, 1, 2).setNumberFormat('@');
+          sheet.getRange(i + 2, 2, 1, 5).setValues([[
+            data.name, data.startTime, data.endTime || '',
+            data.color || '#6c757d',
+            (data.order != null) ? Number(data.order) : (i + 1)
+          ]]);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function deletePattern(id) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(PATTERN_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'error', message: '見つかりません' };
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = ids.length - 1; i >= 0; i--) {
+        if (String(ids[i][0]) === String(id)) {
+          sheet.deleteRow(i + 2);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  /** Patterns シートが空のときデフォルトデータを投入（公開関数兼内部関数） */
+  function initDefaultPatterns() { return initDefaultPatterns_(); }
+  function initDefaultPatterns_() {
+    const sheet = getOrCreateSheet_(PATTERN_SHEET_NAME, ['ID', '名前', '開始時刻', '終了時刻', '色', '並び順']);
+    if (sheet.getLastRow() >= 2) {
+      return { status: 'already_initialized', patterns: getPatterns() };
+    }
+    const defaults = [
+      ['', '休み',    'allday', '',      '#dc3545', 1],
+      ['', '午前不可', '13:00',  '18:00', '#fd7e14', 2],
+      ['', '15時まで', '09:00',  '15:00', '#0d6efd', 3],
+    ];
+    const rows = defaults.map(d => { d[0] = Utilities.getUuid(); return d; });
+    sheet.getRange(2, 3, rows.length, 2).setNumberFormat('@');
+    sheet.getRange(2, 1, rows.length, 6).setValues(rows);
+    const patterns = rows.map(r => ({
+      id: r[0], name: r[1], startTime: r[2], endTime: r[3], color: r[4], order: r[5]
+    }));
+    return { status: 'success', patterns };
+  }
+
+  // =====================================================================
+  // 一括保存
+  // =====================================================================
+  /**
+  * 複数の予定を一括保存する
+  * @param {{ clientName: string, entries: Array<{date: string, patternId: string}> }} payload
+  * @returns {{ status: string, added: number, skipped: number }}
+  */
+  function saveHolidaysBulk(payload) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'Holidaysシートが見つかりません' };
+
+      const { clientName, entries } = payload;
+
+      // パターン ID → パターン情報
+      const patternMap = {};
+      getPatterns().forEach(p => { patternMap[p.id] = p; });
+
+      // クライアントの色を取得
+      const clientColorMap = {};
+      getClients().forEach(c => {
+        const trimmedColor = c.color.trim();
+        clientColorMap[c.name] = trimmedColor !== '' ? trimmedColor : getClientColor(c.name);
+      });
+
+      // 既存の同会社日付セット（重複スキップ用）
+      const existingDates = new Set();
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        sheet.getRange(2, 1, lastRow - 1, 5).getValues().forEach(row => {
+          if (!row[0] || String(row[4]) !== clientName) return;
+          const d = row[2] ? new Date(row[2]) : null;
+          if (d && !isNaN(d)) existingDates.add(Utilities.formatDate(d, 'JST', 'yyyy-MM-dd'));
+        });
+      }
+
+      const newRows = [];
+      let added = 0, skipped = 0;
+
+      entries.forEach(({ date, patternId }) => {
+        const pattern = patternMap[patternId];
+        if (!pattern)              { skipped++; return; }
+        if (existingDates.has(date)) { skipped++; return; }
+
+        const parts = String(date).split('-').map(Number);
+        const y = parts[0], mo = parts[1] - 1, dy = parts[2];
+        let startObj, endObj;
+        if (pattern.startTime === 'allday') {
+          startObj = new Date(Date.UTC(y, mo, dy,    -9, 0, 0));
+          endObj   = new Date(Date.UTC(y, mo, dy + 1,-9, 0, 0));
+        } else {
+          const [sh, sm] = pattern.startTime.split(':').map(Number);
+          const [eh, em] = (pattern.endTime || '18:00').split(':').map(Number);
+          startObj = new Date(Date.UTC(y, mo, dy, sh - 9, sm, 0));
+          endObj   = new Date(Date.UTC(y, mo, dy, eh - 9, em, 0));
+        }
+
+        const color = clientColorMap[clientName] || getClientColor(clientName);
+        newRows.push([Utilities.getUuid(), pattern.name, startObj, endObj, clientName, '', color]);
+        existingDates.add(date);
+        added++;
+      });
+
+      if (newRows.length > 0) {
+        sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 7).setValues(newRows);
+      }
+      return { status: 'success', added, skipped };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  // =====================================================================
+  // 一括削除
+  // =====================================================================
+  /**
+  * 指定会社の指定日の予定をすべて削除する
+  * @param {string} clientName
+  * @param {string[]} dates  例: ['2025-01-10', '2025-01-15']
+  * @returns {{ status: string, deleted: number }}
+  */
+  function deleteHolidaysBulk(clientName, dates) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'Holidaysシートが見つかりません' };
+      const dateSet = new Set(dates);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'success', deleted: 0 };
+
+      const data = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+      const rowsToDelete = [];
+      data.forEach((row, i) => {
+        if (!row[0] || String(row[4]) !== clientName) return;
+        const d = row[2] ? new Date(row[2]) : null;
+        if (!d || isNaN(d)) return;
+        if (dateSet.has(Utilities.formatDate(d, 'JST', 'yyyy-MM-dd'))) rowsToDelete.push(i + 2);
+      });
+
+      for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+        sheet.deleteRow(rowsToDelete[i]);
+      }
+      return { status: 'success', deleted: rowsToDelete.length };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  // =====================================================================
+  // 既存 CRUD（後方互換）
+  // =====================================================================
+  function addHoliday(event) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+      const clientName = (event.extendedProps || {}).clientName || '';
+      const color = getClientColor(clientName);
+      const s = new Date(event.start);
+      const e_ = event.end ? new Date(event.end) : new Date(s.getTime() + 86400000);
+      const id = Utilities.getUuid();
+      sheet.appendRow([id, event.title, s, e_, clientName, '', color]);
+      return { status: 'success', id };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function updateHoliday(event) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+      const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+      for (let i = 0; i < data.length; i++) {
+        if (String(data[i][0]) === String(event.id)) {
+          const clientName = (event.extendedProps || {}).clientName || '';
+          const color = getClientColor(clientName);
+          const s = new Date(event.start);
+          const e_ = event.end ? new Date(event.end) : new Date(s.getTime() + 86400000);
+          sheet.getRange(i + 2, 2, 1, 6).setValues([[event.title, s, e_, clientName, '', color]]);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: 'イベントが見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function deleteHoliday(eventId) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+      const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+      for (let i = 0; i < data.length; i++) {
+        if (String(data[i][0]) === String(eventId)) {
+          sheet.deleteRow(i + 2);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: 'イベントが見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
