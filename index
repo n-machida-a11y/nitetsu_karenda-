@@ -328,6 +328,7 @@
       <div id="palette"><!-- JS で動的生成 --></div>
       <div id="bulkActions">
         <button id="selectWeekendsBtn">🗓 土日を全選択</button>
+        <button id="selectSundaysBtn">☀️ 日曜を全選択</button>
         <button id="selectHolidaysBtn">🎌 祝日を選択</button>
         <button id="clearSelBtn">✕ 選択クリア</button>
       </div>
@@ -702,6 +703,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('bulkRegisterBtn').addEventListener('click', bulkRegister);
 
   document.getElementById('selectWeekendsBtn').addEventListener('click', selectAllWeekends);
+  document.getElementById('selectSundaysBtn').addEventListener('click', selectAllSundays);
   document.getElementById('selectHolidaysBtn').addEventListener('click', selectHolidays);
   document.getElementById('clearSelBtn').addEventListener('click', clearSelection);
 
@@ -1587,6 +1589,38 @@ function selectAllWeekends() {
   for (let d = 1; d <= daysInMonth; d++) {
     const dow = new Date(year, month, d).getDay();
     if (dow === 0 || dow === 6) targets.push(localDateStr(year, month, d));
+  }
+  if (targets.length === 0) return;
+
+  if (patId === '__custom_input__') {
+    showCustomInputModal(targets);
+    return;
+  }
+
+  const curSet = selectionsByPattern.get(patId) || new Set();
+  const allSelected = targets.every(d => curSet.has(d));
+  if (allSelected) {
+    targets.forEach(d => curSet.delete(d));
+  } else {
+    targets.forEach(d => addToSelection(patId, d));
+  }
+
+  updateSelectedCells();
+  updateFooter();
+  calendar.refetchEvents();
+}
+
+function selectAllSundays() {
+  if (!inputModeClient) return;
+  const patId = getSelectedPatternId();
+  if (!patId || patId === '__delete__') return;
+  const viewDate = calendar.getDate();
+  const year = viewDate.getFullYear(), month = viewDate.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const targets = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    if (new Date(year, month, d).getDay() === 0) targets.push(localDateStr(year, month, d));
   }
   if (targets.length === 0) return;
 

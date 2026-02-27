@@ -19,6 +19,17 @@
   // =====================================================================
   // 日本の祝日取得
   // =====================================================================
+  // 国民の祝日に関する法律で定められた祝日名のみを対象とする
+  // ひな祭り・七夕・お盆・冬至等の祭日・行事は除外
+  const NATIONAL_HOLIDAY_NAMES = new Set([
+    '元日', '成人の日', '建国記念の日', '天皇誕生日',
+    '春分の日', '昭和の日', '憲法記念日', 'みどりの日', 'こどもの日',
+    '海の日', '山の日', '敬老の日', '秋分の日',
+    'スポーツの日', '体育の日',
+    '文化の日', '勤労感謝の日',
+    '振替休日', '国民の休日'
+  ]);
+
   function getJapaneseHolidays() {
     try {
       const calendarId = 'ja.japanese#holiday@group.v.calendar.google.com';
@@ -28,14 +39,16 @@
         new Date(now.getFullYear() - 1, 0, 1),
         new Date(now.getFullYear() + 1, 11, 31)
       );
-      return events.map(ev => ({
-        title: ev.getTitle(),
-        start: Utilities.formatDate(ev.getStartTime(), 'JST', 'yyyy-MM-dd'),
-        allDay: true,
-        display: 'background',
-        backgroundColor: '#fff0f0',
-        extendedProps: { isHoliday: true }
-      }));
+      return events
+        .filter(ev => NATIONAL_HOLIDAY_NAMES.has(ev.getTitle()))
+        .map(ev => ({
+          title: ev.getTitle(),
+          start: Utilities.formatDate(ev.getStartTime(), 'JST', 'yyyy-MM-dd'),
+          allDay: true,
+          display: 'background',
+          backgroundColor: '#fff0f0',
+          extendedProps: { isHoliday: true }
+        }));
     } catch (e) {
       console.warn('祝日取得エラー', e);
       return [];
