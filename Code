@@ -1,11 +1,13 @@
   // =====================================================================
   // シート名定数
   // =====================================================================
-  const SHEET_NAME         = 'Holidays';
-  const CLIENT_SHEET_NAME  = 'Clients';
-  const PATTERN_SHEET_NAME = 'Patterns';
-  const AREA_SHEET_NAME    = 'Areas';
-  const USER_SHEET_NAME    = 'Users';
+  const SHEET_NAME            = 'Holidays';
+  const CLIENT_SHEET_NAME     = 'Clients';
+  const PATTERN_SHEET_NAME    = 'Patterns';
+  const AREA_SHEET_NAME       = 'Areas';
+  const USER_SHEET_NAME       = 'Users';
+  const ATTACHMENT_SHEET_NAME = 'Attachments';
+  const ATTACHMENT_FOLDER_NAME = '得意先添付ファイル';
 
   // =====================================================================
   // Web アプリのエントリポイント
@@ -721,3 +723,79 @@
     }
   }
 
+  // =====================================================================
+  // 添付ファイル管理
+  // =====================================================================
+
+  /** 添付ファイル保存用Driveフォルダを取得または作成 */
+  function getOrCreateAttachmentFolder_() {
+    const folders = DriveApp.getFoldersByName(ATTACHMENT_FOLDER_NAME);
+    if (folders.hasNext()) return folders.next();
+    return DriveApp.createFolder(ATTACHMENT_FOLDER_NAME);
+  }
+
+  /** 指定会社の添付ファイル一覧を返す */
+  function getAttachments(clientName) {
+    try {
+      const sheet = getOrCreateSheet_(ATTACHMENT_SHEET_NAME,
+        ['ID', '会社名', 'ファイル名', 'DriveファイルID', 'アップロード日時', 'メモ']);
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return [];
+      return sheet.getRange(2, 1, lastRow - 1, 6).getValues()
+        .filter(r => r[0] && (!clientName || String(r[1]) === clientName))
+        .map(r => ({
+          id:         String(r[0]),
+          clientName: String(r[1]),
+          fileName:   String(r[2]),
+          fileId:     String(r[3]),
+          uploadedAt: r[4] ? Utilities.formatDate(new Date(r[4]), 'JST', 'yyyy/MM/dd HH:mm') : '',
+          memo:       String(r[5] || '')
+        }));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /**
+   * 添付ファイルをDriveにアップロードしてシートに記録する
+   * @param {{ clientName:string, fileName:string, mimeType:string, base64Data:string, memo:string }} payload
+   */
+  function uploadAttachment(payload) {
+    try {
+      const decoded = Utilities.base64Decode(payload.base64Data);
+      const blob    = Utilities.newBlob(decoded, payload.mimeType, payload.fileName);
+      const folder  = getOrCreateAttachmentFolder_();
+      const file    = folder.createFile(blob);
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+      const sheet = getOrCreateSheet_(ATTACHMENT_SHEET_NAME,
+        ['ID', '会社名', 'ファイル名', 'DriveファイルID', 'アップロード日時', 'メモ']);
+      const id = Utilities.getUuid();
+      sheet.appendRow([id, payload.clientName, payload.fileName, file.getId(), new Date(), payload.memo || '']);
+      return { status: 'success', id: id, fileId: file.getId(), fileName: payload.fileName };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  /** 添付ファイルをシートとDriveから削除する */
+  function deleteAttachment(id) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(ATTACHMENT_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'error', message: '見つかりません' };
+      const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
+      for (let i = 0; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(id)) {
+          const fileId = String(rows[i][3]);
+          try { DriveApp.getFileById(fileId).setTrashed(true); } catch (e) { /* 既に存在しない場合は無視 */ }
+          sheet.deleteRow(i + 2);
+          return { status: 'success' };
+        }
+      }
+      return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }

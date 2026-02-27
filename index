@@ -70,6 +70,14 @@
     .input-start-btn:hover { background: #0d47a1; }
     .client-item.input-active .input-start-btn { background: #e53935; }
     .client-item.input-active .input-start-btn::before { content: '■ '; }
+    .attach-btn {
+      flex-shrink: 0;
+      background: #f3f3f3; color: #555;
+      border: 1px solid #ccc; border-radius: 4px;
+      padding: 2px 5px; font-size: 0.72rem; cursor: pointer;
+      margin-top: 1px;
+    }
+    .attach-btn:hover { background: #e0e0e0; }
     .rule-badge { font-size: 0.7rem; color: #856404; background: #fff3cd; border-radius: 10px; padding: 1px 5px; flex-shrink: 0; }
     #sidebarFooter { padding: 8px 12px; border-top: 1px solid #dee2e6; }
     #stopInputBtn {
@@ -550,6 +558,47 @@
   </div>
 </div>
 
+<!-- ===== 添付ファイルモーダル ===== -->
+<div class="modal fade" id="attachmentModal" tabindex="-1" style="z-index:1055">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="attachmentModalTitle">📎 添付ファイル</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body px-3 py-2">
+        <!-- ファイル一覧 -->
+        <div id="attachmentList" style="min-height:60px;max-height:320px;overflow-y:auto;margin-bottom:12px;">
+          <div class="text-muted small py-2 text-center" id="attachmentListEmpty">読み込み中...</div>
+        </div>
+        <!-- アップロードフォーム -->
+        <div class="border rounded p-2" style="background:#f9f9f9;">
+          <div class="fw-semibold mb-2" style="font-size:0.85rem;">ファイルを追加</div>
+          <div class="d-flex gap-2 flex-wrap align-items-end">
+            <div>
+              <label class="form-label form-label-sm mb-1">ファイル（PDF・画像 8MB以下）</label>
+              <input type="file" id="attachFileInput" class="form-control form-control-sm"
+                accept="application/pdf,image/*" style="max-width:260px;">
+            </div>
+            <div style="flex:1;min-width:120px;">
+              <label class="form-label form-label-sm mb-1">メモ（任意）</label>
+              <input type="text" id="attachMemoInput" class="form-control form-control-sm" placeholder="例: 2024年版 納品カレンダー">
+            </div>
+            <button class="btn btn-sm btn-primary" id="attachUploadBtn"
+              style="padding:5px 14px;white-space:nowrap;" onclick="handleAttachmentUpload()">
+              アップロード
+            </button>
+          </div>
+          <div id="attachUploadStatus" class="text-muted small mt-1"></div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== インライン編集用モーダル ===== -->
 <div class="modal fade" id="editModal" tabindex="-1" style="z-index:1090">
   <div class="modal-dialog modal-sm modal-dialog-centered">
@@ -587,6 +636,10 @@ let checkedClients = new Set();    // 表示フィルターでチェック済み
 let inputModeClient = null;            // 入力モード中の会社名（null=通常モード）
 let selectionsByPattern = new Map();   // Map<patternId, Set<dateStr>>
 let preInputFilters = null;            // 入力モード前のフィルター状態
+
+// 添付ファイルモーダル
+let attachmentModal;
+let attachmentModalClient = '';
 
 // ドラッグ選択用
 let isDragging    = false;
@@ -685,6 +738,7 @@ document.addEventListener('DOMContentLoaded', () => {
   customAlertModal   = new bootstrap.Modal(document.getElementById('customAlertModal'));
   customConfirmModal = new bootstrap.Modal(document.getElementById('customConfirmModal'));
   customInputModalBS = new bootstrap.Modal(document.getElementById('customInputModal'));
+  attachmentModal    = new bootstrap.Modal(document.getElementById('attachmentModal'));
 
   // 設定モーダルの上に重なるモーダルのバックドロップを前面に出す
   ['editModal','customAlertModal','customConfirmModal','customInputModal'].forEach(id => {
@@ -1374,6 +1428,14 @@ function renderClientListTo(listId, allCbId) {
       item.appendChild(inputBtn);
     }
 
+    // 添付ファイルボタン
+    const attachBtn = document.createElement('button');
+    attachBtn.className = 'attach-btn';
+    attachBtn.textContent = '📎';
+    attachBtn.title = '添付ファイルを開く';
+    attachBtn.addEventListener('click', () => openAttachmentModal(client.name));
+    item.appendChild(attachBtn);
+
     container.appendChild(item);
   });
 
@@ -1691,6 +1753,123 @@ function clearSelection() {
   updateSelectedCells();
   updateFooter();
   calendar.refetchEvents();
+}
+
+// =====================================================================
+// 添付ファイル
+// =====================================================================
+function openAttachmentModal(clientName) {
+  attachmentModalClient = clientName;
+  document.getElementById('attachmentModalTitle').textContent = '📎 ' + clientName + ' - 添付ファイル';
+  document.getElementById('attachmentListEmpty').textContent = '読み込み中...';
+  document.getElementById('attachmentList').innerHTML =
+    '<div class="text-muted small py-2 text-center" id="attachmentListEmpty">読み込み中...</div>';
+  document.getElementById('attachFileInput').value = '';
+  document.getElementById('attachMemoInput').value = '';
+  document.getElementById('attachUploadStatus').textContent = '';
+  attachmentModal.show();
+  google.script.run
+    .withSuccessHandler(files => renderAttachmentList(files))
+    .withFailureHandler(() => {
+      document.getElementById('attachmentList').innerHTML =
+        '<div class="text-danger small py-2 text-center">読み込みに失敗しました</div>';
+    })
+    .getAttachments(clientName);
+}
+
+function renderAttachmentList(files) {
+  const container = document.getElementById('attachmentList');
+  if (!files || files.length === 0) {
+    container.innerHTML = '<div class="text-muted small py-2 text-center">添付ファイルはありません</div>';
+    return;
+  }
+  const rows = files.map(f => `
+    <tr>
+      <td style="font-size:0.85rem;word-break:break-all;">${escHtml(f.fileName)}</td>
+      <td style="font-size:0.8rem;white-space:nowrap;color:#888;">${escHtml(f.uploadedAt)}</td>
+      <td style="font-size:0.8rem;color:#666;">${escHtml(f.memo)}</td>
+      <td style="white-space:nowrap;">
+        <a href="https://drive.google.com/file/d/${escHtml(f.fileId)}/view" target="_blank"
+          class="btn btn-xs btn-outline-primary btn-sm" style="padding:1px 8px;font-size:0.75rem;">👁 開く</a>
+        <button class="btn btn-xs btn-outline-danger btn-sm" style="padding:1px 8px;font-size:0.75rem;"
+          onclick="deleteAttachmentItem('${escHtml(f.id)}','${escHtml(f.fileName)}')">🗑</button>
+      </td>
+    </tr>`).join('');
+  container.innerHTML = `
+    <table class="table table-sm table-hover mb-0" style="font-size:0.85rem;">
+      <thead><tr>
+        <th style="font-size:0.78rem;">ファイル名</th>
+        <th style="font-size:0.78rem;">日時</th>
+        <th style="font-size:0.78rem;">メモ</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+function handleAttachmentUpload() {
+  const fileInput = document.getElementById('attachFileInput');
+  const memo      = document.getElementById('attachMemoInput').value.trim();
+  const statusEl  = document.getElementById('attachUploadStatus');
+  if (!fileInput.files || fileInput.files.length === 0) {
+    statusEl.textContent = 'ファイルを選択してください';
+    statusEl.className = 'text-danger small mt-1';
+    return;
+  }
+  const file = fileInput.files[0];
+  if (file.size > 8 * 1024 * 1024) {
+    statusEl.textContent = 'ファイルサイズは8MB以下にしてください';
+    statusEl.className = 'text-danger small mt-1';
+    return;
+  }
+  statusEl.textContent = 'アップロード中...';
+  statusEl.className = 'text-muted small mt-1';
+  document.getElementById('attachUploadBtn').disabled = true;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const base64Data = e.target.result.split(',')[1];
+    google.script.run
+      .withSuccessHandler(result => {
+        document.getElementById('attachUploadBtn').disabled = false;
+        if (result.status === 'success') {
+          statusEl.textContent = '';
+          openAttachmentModal(attachmentModalClient);
+        } else {
+          statusEl.textContent = 'エラー: ' + result.message;
+          statusEl.className = 'text-danger small mt-1';
+        }
+      })
+      .withFailureHandler(err => {
+        document.getElementById('attachUploadBtn').disabled = false;
+        statusEl.textContent = 'エラー: ' + (err.message || err);
+        statusEl.className = 'text-danger small mt-1';
+      })
+      .uploadAttachment({
+        clientName: attachmentModalClient,
+        fileName:   file.name,
+        mimeType:   file.type || 'application/octet-stream',
+        base64Data: base64Data,
+        memo:       memo
+      });
+  };
+  reader.readAsDataURL(file);
+}
+
+function deleteAttachmentItem(id, fileName) {
+  showConfirm('「' + fileName + '」を削除しますか？', () => {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        if (result.status === 'success') {
+          openAttachmentModal(attachmentModalClient);
+        } else {
+          showAlert('削除エラー: ' + result.message);
+        }
+      })
+      .withFailureHandler(err => { showLoading(false); showAlert('削除エラー: ' + (err.message || err)); })
+      .deleteAttachment(id);
+  });
 }
 
 // =====================================================================
