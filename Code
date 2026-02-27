@@ -298,16 +298,18 @@
       const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CLIENT_SHEET_NAME);
       if (!sheet || sheet.getLastRow() < 2) return [];
       const lastCol = sheet.getLastColumn();
-      const cols = Math.min(5, Math.max(3, lastCol));
+      const cols = Math.min(6, Math.max(3, lastCol));
       return sheet.getRange(2, 1, sheet.getLastRow() - 1, cols).getValues()
         .filter(r => r[0])
-        .map(r => ({
+        .map((r, idx) => ({
           id:     String(r[0]),
           name:   String(r[1]),
           memo:   String(r[2] || ''),
           areaId: String(r[3] || ''),
-          color:  String(r[4] || '').trim()
-        }));
+          color:  String(r[4] || '').trim(),
+          order:  (r[5] !== undefined && r[5] !== '') ? Number(r[5]) : idx * 10
+        }))
+        .sort((a, b) => a.order - b.order);
     } catch (e) {
       console.error('getClients error', e);
       return [];
@@ -316,9 +318,16 @@
 
   function addClient(data) {
     try {
-      const sheet = getOrCreateSheet_(CLIENT_SHEET_NAME, ['ID', '会社名', '備考', 'エリアID', '色']);
+      const sheet = getOrCreateSheet_(CLIENT_SHEET_NAME, ['ID', '会社名', '備考', 'エリアID', '色', '並び順']);
       const id = Utilities.getUuid();
-      sheet.appendRow([id, data.name, data.memo || '', data.areaId || '', data.color || '']);
+      // 現在の最大並び順 + 10 を初期値に
+      let maxOrder = 0;
+      const lastRow = sheet.getLastRow();
+      if (lastRow >= 2) {
+        sheet.getRange(2, 6, lastRow - 1, 1).getValues()
+          .forEach(r => { if (r[0] !== '') maxOrder = Math.max(maxOrder, Number(r[0]) || 0); });
+      }
+      sheet.appendRow([id, data.name, data.memo || '', data.areaId || '', data.color || '', maxOrder + 10]);
       return { status: 'success', id };
     } catch (e) {
       return { status: 'error', message: e.toString() };
@@ -335,6 +344,7 @@
       const lastCol = sheet.getLastColumn();
       if (lastCol < 4) sheet.getRange(1, 4).setValue('エリアID');
       if (lastCol < 5) sheet.getRange(1, 5).setValue('色');
+      if (lastCol < 6) sheet.getRange(1, 6).setValue('並び順');
       const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
       for (let i = 0; i < ids.length; i++) {
         if (String(ids[i][0]) === String(data.id)) {
@@ -364,6 +374,28 @@
         }
       }
       return { status: 'error', message: '見つかりません' };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  function reorderClients(orders) {
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CLIENT_SHEET_NAME);
+      if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
+      const lastRow = sheet.getLastRow();
+      if (lastRow < 2) return { status: 'success' };
+      if (sheet.getLastColumn() < 6) sheet.getRange(1, 6).setValue('並び順');
+      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      const orderMap = {};
+      orders.forEach(o => { orderMap[String(o.id)] = Number(o.order); });
+      for (let i = 0; i < ids.length; i++) {
+        const id = String(ids[i][0]);
+        if (orderMap[id] !== undefined) {
+          sheet.getRange(i + 2, 6).setValue(orderMap[id]);
+        }
+      }
+      return { status: 'success' };
     } catch (e) {
       return { status: 'error', message: e.toString() };
     }

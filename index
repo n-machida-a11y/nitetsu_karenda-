@@ -233,6 +233,17 @@
     .settings-item .item-meta { font-size: 0.78rem; color: #888; }
     .color-preview { width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1); }
 
+    /* 会社並び替え用 */
+    .sortable-item { cursor: default; }
+    .drag-handle { cursor: grab; color: #bbb; font-size: 1rem; user-select: none; }
+    .drag-handle:active { cursor: grabbing; }
+    .sortable-item.dragging { opacity: 0.4; background: #f8f9fa; }
+    .sortable-item.drag-over-top { border-top: 2px solid #1565c0; }
+    .sortable-item.drag-over-bottom { border-bottom: 2px solid #1565c0; }
+    #clientSettingsList .accordion-button { padding: 8px 12px; font-size: 0.88rem; font-weight: 600; }
+    #clientSettingsList .accordion-button:not(.collapsed) { background: #e3f2fd; color: #1565c0; box-shadow: none; }
+    #clientSettingsList .accordion-item { border-left: none; border-right: none; border-radius: 0 !important; }
+
     /* ===== 権限バッジ（ユーザー管理） ===== */
     .role-label { font-size: 0.75rem; padding: 2px 7px; border-radius: 10px; font-weight: 600; }
     .role-label.admin  { background: #fff9c4; color: #5d4037; border: 1px solid #fdd835; }
@@ -1824,7 +1835,6 @@ function collectCheckedAreas(containerId) {
 // ===== 会社管理 =====
 function renderClientSettings() {
   const container = document.getElementById('clientSettingsList');
-  // 管理者は全社、それ以外は編集エリアに含まれる会社のみ表示
   let visibleForSettings = clients;
   if (!isAdmin() && currentUser) {
     const editList = parseIdList(currentUser.editableAreas);
@@ -1837,21 +1847,72 @@ function renderClientSettings() {
     container.innerHTML = '<div class="text-muted small p-3">会社がありません</div>';
     return;
   }
-  container.innerHTML = visibleForSettings.map(c => {
-    const area = areas.find(a => a.id === c.areaId);
-    const clientColor = (c.color && c.color !== '') ? c.color : '#6c757d';
-    return `
-      <div class="settings-item">
-        <div class="color-preview" style="background:${escHtml(clientColor)}"></div>
-        <div class="item-name">${escHtml(c.name)}</div>
-        <div class="item-meta">${area ? escHtml(area.name) : '未設定'}</div>
-        <button class="btn btn-xs btn-outline-secondary btn-sm ms-auto" style="padding:2px 8px;font-size:0.75rem"
-          onclick="editClientModal('${escHtml(c.id)}')">編集</button>
-        <button class="btn btn-xs btn-outline-danger btn-sm ms-1" style="padding:2px 8px;font-size:0.75rem"
-          onclick="deleteClientConfirm('${escHtml(c.id)}','${escHtml(c.name)}')">削除</button>
+
+  // エリアでグループ化
+  const grouped = {};
+  visibleForSettings.forEach(c => {
+    const key = c.areaId || '__none__';
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(c);
+  });
+
+  // エリアの表示順（areas の順 + 未設定を最後）
+  const areaOrder = areas.map(a => a.id);
+  const sortedKeys = Object.keys(grouped).sort((a, b) => {
+    const ai = a === '__none__' ? 9999 : areaOrder.indexOf(a);
+    const bi = b === '__none__' ? 9999 : areaOrder.indexOf(b);
+    return (ai === -1 ? 9998 : ai) - (bi === -1 ? 9998 : bi);
+  });
+
+  let html = '<div class="accordion" id="clientAccordion">';
+  sortedKeys.forEach((key, idx) => {
+    const area = areas.find(a => a.id === key);
+    const areaName = area ? escHtml(area.name) : '未設定';
+    const collapseId = 'clientArea_' + (key === '__none__' ? 'none' : key.replace(/[^a-zA-Z0-9]/g, '_'));
+    const isOpen = idx === 0;
+
+    html += `
+      <div class="accordion-item">
+        <h6 class="accordion-header m-0">
+          <button class="accordion-button ${isOpen ? '' : 'collapsed'}" type="button"
+            data-bs-toggle="collapse" data-bs-target="#${collapseId}">
+            ${areaName}
+            <span class="badge bg-secondary ms-2" style="font-size:0.7rem;">${grouped[key].length}</span>
+          </button>
+        </h6>
+        <div id="${collapseId}" class="accordion-collapse collapse ${isOpen ? 'show' : ''}">
+          <div class="accordion-body p-0">
+            <div class="sortable-list" data-area-id="${escHtml(key)}">
+    `;
+
+    grouped[key].forEach(c => {
+      const clientColor = (c.color && c.color !== '') ? c.color : '#6c757d';
+      html += `
+        <div class="settings-item sortable-item" draggable="true" data-id="${escHtml(c.id)}"
+          ondragstart="onClientDragStart(event)" ondragover="onClientDragOver(event)"
+          ondragleave="onClientDragLeave(event)" ondrop="onClientDrop(event)" ondragend="onClientDragEnd(event)">
+          <span class="drag-handle">⠿</span>
+          <div class="color-preview" style="background:${escHtml(clientColor)}"></div>
+          <div class="item-name">${escHtml(c.name)}</div>
+          <button class="btn btn-xs btn-outline-secondary btn-sm ms-auto" style="padding:2px 8px;font-size:0.75rem"
+            onclick="editClientModal('${escHtml(c.id)}')">編集</button>
+          <button class="btn btn-xs btn-outline-danger btn-sm ms-1" style="padding:2px 8px;font-size:0.75rem"
+            onclick="deleteClientConfirm('${escHtml(c.id)}','${escHtml(c.name)}')">削除</button>
+        </div>
+      `;
+    });
+
+    html += `
+            </div>
+          </div>
+        </div>
       </div>
     `;
-  }).join('');
+  });
+
+  html += '</div>';
+  html += '<div class="p-2 text-end border-top"><button class="btn btn-sm btn-primary" onclick="saveClientOrder()">並び順を保存</button></div>';
+  container.innerHTML = html;
 }
 
 function handleAddClient() {
@@ -1932,6 +1993,77 @@ function deleteClientConfirm(id, name) {
       .withFailureHandler(handleError)
       .deleteClient(id);
   });
+}
+
+// =====================================================================
+// 会社並び替え（ドラッグ&ドロップ）
+// =====================================================================
+let clientDragSrc = null;
+
+function onClientDragStart(e) {
+  clientDragSrc = e.currentTarget;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', clientDragSrc.dataset.id);
+  setTimeout(() => { if (clientDragSrc) clientDragSrc.classList.add('dragging'); }, 0);
+}
+
+function onClientDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const target = e.currentTarget;
+  if (!target || target === clientDragSrc) return;
+  // 同じエリア内のみ許可
+  if (target.closest('.sortable-list') !== clientDragSrc.closest('.sortable-list')) return;
+  document.querySelectorAll('.sortable-item.drag-over-top, .sortable-item.drag-over-bottom')
+    .forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+  const rect = target.getBoundingClientRect();
+  if (e.clientY < rect.top + rect.height / 2) {
+    target.classList.add('drag-over-top');
+  } else {
+    target.classList.add('drag-over-bottom');
+  }
+}
+
+function onClientDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over-top', 'drag-over-bottom');
+}
+
+function onClientDrop(e) {
+  e.preventDefault();
+  const target = e.currentTarget;
+  if (!target || !clientDragSrc || target === clientDragSrc) return;
+  if (target.closest('.sortable-list') !== clientDragSrc.closest('.sortable-list')) return;
+  const rect = target.getBoundingClientRect();
+  if (e.clientY < rect.top + rect.height / 2) {
+    target.parentNode.insertBefore(clientDragSrc, target);
+  } else {
+    target.parentNode.insertBefore(clientDragSrc, target.nextSibling);
+  }
+  target.classList.remove('drag-over-top', 'drag-over-bottom');
+}
+
+function onClientDragEnd(e) {
+  if (clientDragSrc) clientDragSrc.classList.remove('dragging');
+  document.querySelectorAll('.sortable-item.drag-over-top, .sortable-item.drag-over-bottom')
+    .forEach(el => el.classList.remove('drag-over-top', 'drag-over-bottom'));
+  clientDragSrc = null;
+}
+
+function saveClientOrder() {
+  const orders = [];
+  let order = 0;
+  document.querySelectorAll('#clientSettingsList .sortable-item').forEach(item => {
+    orders.push({ id: item.dataset.id, order: order++ });
+  });
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(result => {
+      showLoading(false);
+      if (result.status === 'success') reloadClients();
+      else showAlert('保存エラー: ' + result.message);
+    })
+    .withFailureHandler(handleError)
+    .reorderClients(orders);
 }
 
 function reloadClients() {
