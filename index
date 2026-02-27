@@ -625,8 +625,9 @@ function parseIdList(str) {
 /** 指定会社への入力権限 */
 function canEdit(clientName) {
   if (!currentUser) return false;
-  if (currentUser.isAdmin) return true; // 管理者は全エリア編集可
   const editList = parseIdList(currentUser.editableAreas);
+  // 管理者かつ編集エリア未設定 → 全エリア編集可
+  if (currentUser.isAdmin && editList.length === 0) return true;
   if (editList.length === 0) return false;
   const client = clients.find(c => c.name === clientName);
   if (!client || !client.areaId) return false;
@@ -2333,9 +2334,7 @@ function handleAddUser() {
       isAdmin:       document.getElementById('newUserIsAdmin').checked,
       viewableAreas: document.querySelector('input[name="newViewMode"]:checked').value === 'all'
                       ? '' : collectCheckedAreas('newUserViewableChecks'),
-      // 管理者は editableAreas = ''（全エリア編集可）、それ以外はUIから取得
       editableAreas: (function() {
-        if (document.getElementById('newUserIsAdmin').checked) return '';
         const modeEl = document.querySelector('input[name="newEditMode"]:checked');
         if (!modeEl || modeEl.value === 'none') return '';
         return [...document.querySelectorAll('.newUserEditableChecks_cb:checked')].map(cb => cb.value).join(',');
@@ -2343,58 +2342,32 @@ function handleAddUser() {
     });
 }
 
-/** 追加フォーム用: 管理者チェックON/OFFで編集エリアセクションを切り替え */
+/** 追加フォーム用: 管理者チェックON/OFFでラベルとUIを更新 */
 function onNewAdminCheckChange(checked) {
   const content = document.getElementById('newUserEditContent');
   if (!content) return;
-  if (checked) {
-    content.innerHTML = '<div class="text-success py-1" style="font-size:0.85rem;">★ 管理者は全エリアを編集できます</div>';
-  } else {
-    const editChecks = areas.map(a =>
-      `<label class="d-flex align-items-center gap-1" style="font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" class="newUserEditableChecks_cb" value="${escHtml(a.id)}"> ${escHtml(a.name)}
-      </label>`
-    ).join('');
-    content.innerHTML = `
-      <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
-        <input type="radio" name="newEditMode" value="none" checked
-          onchange="document.getElementById('newUserEditSub').classList.add('d-none')">編集不可
-      </label>
-      <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
-        <input type="radio" name="newEditMode" value="select"
-          onchange="document.getElementById('newUserEditSub').classList.remove('d-none')">選んで編集可
-      </label>
-      <div id="newUserEditSub" class="d-flex flex-wrap gap-2 ps-2 d-none">${editChecks}</div>`;
-  }
+  const noneLabel = checked ? '全エリアを編集可（未制限）' : '編集不可（閲覧のみ）';
+  const editChecks = areas.map(a =>
+    `<label class="d-flex align-items-center gap-1" style="font-size:0.82rem;cursor:pointer;">
+      <input type="checkbox" class="newUserEditableChecks_cb" value="${escHtml(a.id)}"> ${escHtml(a.name)}
+    </label>`
+  ).join('');
+  content.innerHTML = `
+    <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
+      <input type="radio" name="newEditMode" value="none" checked
+        onchange="document.getElementById('newUserEditSub').classList.add('d-none')">${noneLabel}
+    </label>
+    <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.82rem;cursor:pointer;">
+      <input type="radio" name="newEditMode" value="select"
+        onchange="document.getElementById('newUserEditSub').classList.remove('d-none')">選んで編集可
+    </label>
+    <div id="newUserEditSub" class="d-flex flex-wrap gap-2 ps-2 d-none">${editChecks}</div>`;
 }
 
-/** 編集モーダル用: 管理者チェックON/OFFで編集エリアセクションを切り替え */
+/** 編集モーダル用: 管理者チェックON/OFFでラベルを更新 */
 function onAdminCheckChange(checked) {
-  const content = document.getElementById('eu_editContent');
-  if (!content) return;
-  if (checked) {
-    content.innerHTML = '<div class="text-success py-1" style="font-size:0.85rem;">★ 管理者は全エリアを編集できます</div>';
-  } else {
-    const editChecks = areas.map(a =>
-      `<label class="d-flex align-items-center gap-1" style="font-size:0.82rem;cursor:pointer;">
-        <input type="checkbox" class="eu_editCb" value="${escHtml(a.id)}"> ${escHtml(a.name)}
-      </label>`
-    ).join('');
-    content.innerHTML = `
-      <label class="d-flex align-items-center gap-1 mb-2" style="font-size:0.85rem;cursor:pointer;">
-        <input type="radio" name="eu_editMode" value="none" checked
-          onchange="document.getElementById('eu_editChecks').classList.add('d-none')">
-        編集不可（閲覧のみ）
-      </label>
-      <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.85rem;cursor:pointer;">
-        <input type="radio" name="eu_editMode" value="select"
-          onchange="document.getElementById('eu_editChecks').classList.remove('d-none')">
-        エリアを選んで編集可
-      </label>
-      <div id="eu_editChecks" class="d-flex flex-wrap gap-2 ps-3 pt-1 d-none">
-        ${editChecks || '<span class="text-muted small">エリアなし</span>'}
-      </div>`;
-  }
+  const label = document.getElementById('eu_editNoneLabel');
+  if (label) label.textContent = checked ? '全エリアを編集可（未制限）' : '編集不可（閲覧のみ）';
 }
 
 function editUserModal(id, name, email, isAdmin, viewableAreas, editableAreas) {
@@ -2445,24 +2418,21 @@ function editUserModal(id, name, email, isAdmin, viewableAreas, editableAreas) {
       </div>
     </div>
     <div class="border rounded p-2">
-      <div class="form-label form-label-sm fw-bold mb-2">編集エリア</div>
+      <div class="form-label form-label-sm fw-bold mb-2">編集エリア <span class="text-muted" style="font-size:0.75rem;">（管理者は未選択=全エリア編集可）</span></div>
       <div id="eu_editContent">
-        ${isAdmin
-          ? '<div class="text-success py-1" style="font-size:0.85rem;">★ 管理者は全エリアを編集できます</div>'
-          : `<label class="d-flex align-items-center gap-1 mb-2" style="font-size:0.85rem;cursor:pointer;">
-              <input type="radio" name="eu_editMode" value="none" ${editNone ? 'checked' : ''}
-                onchange="document.getElementById('eu_editChecks').classList.add('d-none')">
-              編集不可（閲覧のみ）
-            </label>
-            <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.85rem;cursor:pointer;">
-              <input type="radio" name="eu_editMode" value="select" ${!editNone ? 'checked' : ''}
-                onchange="document.getElementById('eu_editChecks').classList.remove('d-none')">
-              エリアを選んで編集可
-            </label>
-            <div id="eu_editChecks" class="d-flex flex-wrap gap-2 ps-3 pt-1 ${editNone ? 'd-none' : ''}">
-              ${editChecks || '<span class="text-muted small">エリアなし</span>'}
-            </div>`
-        }
+        <label class="d-flex align-items-center gap-1 mb-2" style="font-size:0.85rem;cursor:pointer;">
+          <input type="radio" name="eu_editMode" value="none" ${editNone ? 'checked' : ''}
+            onchange="document.getElementById('eu_editChecks').classList.add('d-none')">
+          <span id="eu_editNoneLabel">${isAdmin ? '全エリアを編集可（未制限）' : '編集不可（閲覧のみ）'}</span>
+        </label>
+        <label class="d-flex align-items-center gap-1 mb-1" style="font-size:0.85rem;cursor:pointer;">
+          <input type="radio" name="eu_editMode" value="select" ${!editNone ? 'checked' : ''}
+            onchange="document.getElementById('eu_editChecks').classList.remove('d-none')">
+          エリアを選んで編集可
+        </label>
+        <div id="eu_editChecks" class="d-flex flex-wrap gap-2 ps-3 pt-1 ${editNone ? 'd-none' : ''}">
+          ${editChecks || '<span class="text-muted small">エリアなし</span>'}
+        </div>
       </div>
     </div>
   `;
@@ -2474,13 +2444,9 @@ function editUserModal(id, name, email, isAdmin, viewableAreas, editableAreas) {
     const adminChecked = document.getElementById('eu_isAdmin').checked;
     const viewMode = document.querySelector('input[name="eu_viewMode"]:checked').value;
     const newViewable = viewMode === 'all' ? '' : [...document.querySelectorAll('.eu_viewCb:checked')].map(cb => cb.value).join(',');
-    // 管理者は editableAreas を空に（全エリア編集可）、それ以外はUIから取得
-    let newEditable = '';
-    if (!adminChecked) {
-      const editModeEl = document.querySelector('input[name="eu_editMode"]:checked');
-      const editMode = editModeEl ? editModeEl.value : 'none';
-      newEditable = editMode === 'none' ? '' : [...document.querySelectorAll('.eu_editCb:checked')].map(cb => cb.value).join(',');
-    }
+    const editModeEl = document.querySelector('input[name="eu_editMode"]:checked');
+    const editMode = editModeEl ? editModeEl.value : 'none';
+    const newEditable = editMode === 'none' ? '' : [...document.querySelectorAll('.eu_editCb:checked')].map(cb => cb.value).join(',');
     showLoading(true);
     google.script.run
       .withSuccessHandler(result => {
