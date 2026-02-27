@@ -563,6 +563,21 @@
   </div>
 </div>
 
+<!-- ===== イベント編集ポップオーバー ===== -->
+<div id="eventPopover" style="display:none;position:fixed;z-index:1050;background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.18);width:260px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-bottom:1px solid #eee;background:#f8f8f8;border-radius:8px 8px 0 0;">
+    <span id="eventPopoverClient" style="font-size:0.82rem;font-weight:600;color:#1565c0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px;"></span>
+    <button id="eventPopoverClose" style="background:none;border:none;font-size:0.9rem;cursor:pointer;color:#888;padding:0 2px;flex-shrink:0;">✕</button>
+  </div>
+  <div style="padding:10px 12px;">
+    <input type="text" id="eventPopoverInput" class="form-control form-control-sm mb-2">
+    <div class="d-flex justify-content-between">
+      <button id="eventPopoverSave" class="btn btn-sm btn-primary" style="min-width:72px;">保存</button>
+      <button id="eventPopoverDelete" class="btn btn-sm btn-outline-danger" style="min-width:72px;">削除</button>
+    </div>
+  </div>
+</div>
+
 <!-- ===== 添付ファイルモーダル ===== -->
 <div class="modal fade" id="attachmentModal" tabindex="-1" style="z-index:1090">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -641,6 +656,10 @@ let checkedClients = new Set();    // 表示フィルターでチェック済み
 let inputModeClient = null;            // 入力モード中の会社名（null=通常モード）
 let selectionsByPattern = new Map();   // Map<patternId, Set<dateStr>>
 let preInputFilters = null;            // 入力モード前のフィルター状態
+
+// イベント編集ポップオーバー
+let popoverEventId  = null;
+let popoverEventObj = null;
 
 // 添付ファイルモーダル
 let attachmentModal;
@@ -804,6 +823,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('palette').addEventListener('change', () => {
     if (rawEvents.length > 0) calendar.refetchEvents();
+  });
+
+  // イベント編集ポップオーバー
+  document.getElementById('eventPopoverClose').addEventListener('click', closeEventPopover);
+  document.getElementById('eventPopoverSave').addEventListener('click', saveEventTitle);
+  document.getElementById('eventPopoverDelete').addEventListener('click', confirmDeleteEventFromPopover);
+  document.getElementById('eventPopoverInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveEventTitle();
+    if (e.key === 'Escape') closeEventPopover();
+  });
+  document.addEventListener('click', e => {
+    const pop = document.getElementById('eventPopover');
+    if (pop && pop.style.display !== 'none' && !pop.contains(e.target)) closeEventPopover();
   });
 
   loadAllData();
@@ -1123,19 +1155,24 @@ function initCalendar() {
 
     eventClick: info => {
       const props = info.event.extendedProps || {};
-      if (props.isHoliday) return;
+      if (props.isHoliday || props.isPreview) return;
 
-      if (!inputModeClient) {
-        // 通常モード: イベントクリックで備考をカレンダー上部に表示
-        if (props.clientName) showInfoBar(props.clientName);
-        return;
-      }
-      // 入力モード: 日付選択として扱う
       info.jsEvent.preventDefault();
       info.jsEvent.stopPropagation();
-      const dateStr = info.event.startStr.substring(0, 10);
-      if (wasDragging) { wasDragging = false; return; }
-      toggleDateSelection(dateStr);
+
+      if (canEdit(props.clientName || '')) {
+        // 編集権限あり → ポップオーバー表示
+        if (wasDragging) { wasDragging = false; return; }
+        showEventPopover(info);
+      } else if (!inputModeClient) {
+        // 編集権限なし・通常モード → 従来通り備考バー表示
+        if (props.clientName) showInfoBar(props.clientName);
+      } else {
+        // 編集権限なし・入力モード → 日付選択として扱う
+        const dateStr = info.event.startStr.substring(0, 10);
+        if (wasDragging) { wasDragging = false; return; }
+        toggleDateSelection(dateStr);
+      }
     },
 
     eventsSet: () => { setTimeout(updateSelectedCells, 0); }
@@ -1761,6 +1798,84 @@ function clearSelection() {
   updateSelectedCells();
   updateFooter();
   calendar.refetchEvents();
+}
+
+// =====================================================================
+// イベント編集ポップオーバー
+// =====================================================================
+function showEventPopover(info) {
+  const ev    = info.event;
+  const props = ev.extendedProps || {};
+  popoverEventId  = ev.id;
+  popoverEventObj = ev;
+
+  document.getElementById('eventPopoverClient').textContent = props.clientName || '';
+  const input = document.getElementById('eventPopoverInput');
+  input.value = ev.title;
+
+  // 位置計算（ビューポート境界を考慮）
+  const W = 260, H = 130;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = info.jsEvent.clientX + 12;
+  let top  = info.jsEvent.clientY + 12;
+  if (left + W > vw - 8) left = info.jsEvent.clientX - W - 12;
+  if (top  + H > vh - 8) top  = info.jsEvent.clientY - H - 12;
+
+  const pop = document.getElementById('eventPopover');
+  pop.style.left    = left + 'px';
+  pop.style.top     = top  + 'px';
+  pop.style.display = '';
+  setTimeout(() => { input.focus(); input.select(); }, 30);
+}
+
+function closeEventPopover() {
+  document.getElementById('eventPopover').style.display = 'none';
+  popoverEventId  = null;
+  popoverEventObj = null;
+}
+
+function saveEventTitle() {
+  const newTitle = document.getElementById('eventPopoverInput').value.trim();
+  if (!newTitle) { showAlert('イベント名を入力してください'); return; }
+  if (!popoverEventId) return;
+  const id = popoverEventId;
+  showLoading(true);
+  google.script.run
+    .withSuccessHandler(result => {
+      showLoading(false);
+      if (result.status === 'success') {
+        const ev = rawEvents.find(e => String(e.id) === String(id));
+        if (ev) ev.title = newTitle;
+        calendar.refetchEvents();
+        closeEventPopover();
+      } else {
+        showAlert('保存エラー: ' + result.message);
+      }
+    })
+    .withFailureHandler(err => { showLoading(false); showAlert('保存エラー: ' + (err.message || err)); })
+    .updateEventTitle(id, newTitle);
+}
+
+function confirmDeleteEventFromPopover() {
+  const ev = popoverEventObj;
+  const id = popoverEventId;
+  if (!ev || !id) return;
+  closeEventPopover();
+  showConfirm(`「${ev.title}」を削除しますか？`, () => {
+    showLoading(true);
+    google.script.run
+      .withSuccessHandler(result => {
+        showLoading(false);
+        if (result.status === 'success') {
+          rawEvents = rawEvents.filter(e => String(e.id) !== String(id));
+          calendar.refetchEvents();
+        } else {
+          showAlert('削除エラー: ' + result.message);
+        }
+      })
+      .withFailureHandler(err => { showLoading(false); showAlert('削除エラー: ' + (err.message || err)); })
+      .deleteHoliday(id);
+  });
 }
 
 // =====================================================================
