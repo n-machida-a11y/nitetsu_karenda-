@@ -37,7 +37,7 @@
     #sidebarHeader .sidebar-title { font-weight: 600; font-size: 0.85rem; color: #555; margin-bottom: 6px; }
     #clientList { flex: 1; padding: 4px 0; overflow-y: auto; }
     .client-item {
-      display: flex; align-items: center; gap: 5px;
+      display: flex; align-items: flex-start; gap: 5px;
       padding: 6px 10px; cursor: default;
       border-left: 3px solid transparent;
       transition: background 0.15s;
@@ -46,10 +46,10 @@
     .client-item.input-active {
       background: #e3f2fd; border-left-color: #1565c0;
     }
-    .client-item .filter-cb { cursor: pointer; flex-shrink: 0; }
-    .client-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.15); }
+    .client-item .filter-cb { cursor: pointer; flex-shrink: 0; margin-top: 3px; }
+    .client-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.15); margin-top: 4px; }
     .client-name-wrap { flex: 1; min-width: 0; padding: 0 4px; }
-    .client-name-label { font-size: 0.92rem; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .client-name-label { font-size: 0.92rem; color: #333; overflow-wrap: break-word; word-break: break-word; }
     .client-item.input-active .client-name-label { font-weight: 700; color: #1565c0; }
     .client-rule-text { font-size: 0.68rem; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
     .rule-info-btn {
@@ -57,7 +57,7 @@
       background: #fff8e1; color: #f57f17;
       border: 1px solid #ffe082; border-radius: 4px;
       padding: 2px 5px; font-size: 0.75rem; cursor: pointer;
-      line-height: 1;
+      line-height: 1; margin-top: 1px;
     }
     .rule-info-btn:hover { background: #fff3cd; }
     .input-start-btn {
@@ -65,7 +65,7 @@
       background: #1565c0; color: #fff;
       border: none; border-radius: 4px;
       padding: 3px 7px; font-size: 0.72rem; cursor: pointer;
-      white-space: nowrap;
+      white-space: nowrap; margin-top: 1px;
     }
     .input-start-btn:hover { background: #0d47a1; }
     .client-item.input-active .input-start-btn { background: #e53935; }
