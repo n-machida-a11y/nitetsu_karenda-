@@ -315,11 +315,6 @@
         <button id="exitInputModeBtn" title="入力モードを終了">✕</button>
       </div>
       <div id="palette"><!-- JS で動的生成 --></div>
-      <div id="customNameWrapper" style="display:flex; gap:4px; align-items:center; margin-bottom:6px;">
-        <input type="text" id="customPatternName" class="form-control form-control-sm"
-          placeholder="自由入力のイベント名" style="max-width:180px;">
-        <button type="button" id="addCustomPatternBtn" class="btn btn-sm btn-outline-secondary">＋追加</button>
-      </div>
       <div id="bulkActions">
         <button id="selectWeekendsBtn">🗓 土日を全選択</button>
         <button id="selectHolidaysBtn">🎌 祝日を選択</button>
@@ -354,6 +349,23 @@
       </div>
       <div class="modal-footer py-2 justify-content-center border-0">
         <button class="btn btn-primary" id="customAlertOk" style="min-width:80px">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 自由入力名入力モーダル -->
+<div class="modal fade" id="customInputModal" tabindex="-1" style="z-index:1090">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-body py-3 px-4">
+        <label class="form-label form-label-sm mb-1">イベント名</label>
+        <input type="text" id="customInputName" class="form-control form-control-sm" placeholder="例: 担当者不在">
+        <div class="text-muted small mt-1" id="customInputDateHint"></div>
+      </div>
+      <div class="modal-footer py-2 justify-content-between border-0">
+        <button class="btn btn-secondary" id="customInputCancel" style="min-width:80px">キャンセル</button>
+        <button class="btn btn-primary"   id="customInputOk"     style="min-width:80px">OK</button>
       </div>
     </div>
   </div>
@@ -567,7 +579,7 @@ let pointerDownDate = null;
 let draggedDates  = new Set();
 
 // Bootstrap モーダルインスタンス
-let settingsModal, editModalBS, customAlertModal, customConfirmModal;
+let settingsModal, editModalBS, customAlertModal, customConfirmModal, customInputModalBS;
 
 // =====================================================================
 // ユーティリティ
@@ -656,9 +668,10 @@ document.addEventListener('DOMContentLoaded', () => {
   editModalBS        = new bootstrap.Modal(document.getElementById('editModal'));
   customAlertModal   = new bootstrap.Modal(document.getElementById('customAlertModal'));
   customConfirmModal = new bootstrap.Modal(document.getElementById('customConfirmModal'));
+  customInputModalBS = new bootstrap.Modal(document.getElementById('customInputModal'));
 
   // 設定モーダルの上に重なるモーダルのバックドロップを前面に出す
-  ['editModal','customAlertModal','customConfirmModal'].forEach(id => {
+  ['editModal','customAlertModal','customConfirmModal','customInputModal'].forEach(id => {
     document.getElementById(id).addEventListener('show.bs.modal', () => {
       setTimeout(() => {
         const bds = document.querySelectorAll('.modal-backdrop');
@@ -714,11 +727,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('palette').addEventListener('change', () => {
     if (rawEvents.length > 0) calendar.refetchEvents();
-  });
-
-  document.getElementById('addCustomPatternBtn').addEventListener('click', addCustomPattern);
-  document.getElementById('customPatternName').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); addCustomPattern(); }
   });
 
   loadAllData();
@@ -1191,6 +1199,20 @@ function buildPalette() {
     container.appendChild(cpLabel);
   });
 
+  // 自由入力ボタン（クリックで名前入力ポップアップ）
+  const freeLabel = document.createElement('label');
+  freeLabel.className = 'palette-btn';
+  freeLabel.innerHTML = `
+    <input type="radio" name="palette" value="__custom_input__" style="display:none">
+    <span class="palette-color-dot" style="background:${escHtml(getPaletteClientColor())};opacity:0.5;border:1px dashed #888;box-sizing:border-box;"></span>
+    ＋ 自由入力
+  `;
+  freeLabel.addEventListener('click', () => {
+    document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
+    freeLabel.classList.add('active');
+  });
+  container.appendChild(freeLabel);
+
   const delLabel = document.createElement('label');
   delLabel.className = 'palette-btn';
   delLabel.innerHTML = `
@@ -1206,22 +1228,44 @@ function buildPalette() {
   container.appendChild(delLabel);
 }
 
-function addCustomPattern() {
-  const name = document.getElementById('customPatternName').value.trim();
-  if (!name) { document.getElementById('customPatternName').focus(); return; }
-  const id = '__custom_' + Date.now() + '__';
-  customPatterns.push({ id, name });
-  document.getElementById('customPatternName').value = '';
-  buildPalette();
-  // 追加した一時パターンを自動選択
-  const radio = document.querySelector(`input[name="palette"][value="${CSS.escape(id)}"]`);
-  if (radio) {
-    radio.checked = true;
-    document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
-    radio.closest('.palette-btn').classList.add('active');
-  }
-  updateFooter();
-  calendar.refetchEvents();
+function showCustomInputModal(dates, onConfirm) {
+  const input = document.getElementById('customInputName');
+  const hint  = document.getElementById('customInputDateHint');
+  input.value = '';
+  hint.textContent = dates.length === 1 ? `対象: ${dates[0]}` : `対象: ${dates.length}日分`;
+
+  document.getElementById('customInputOk').onclick = () => {
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    customInputModalBS.hide();
+
+    // 同名の一時パターンがあれば再利用、なければ新規作成
+    let cp = customPatterns.find(p => p.name === name);
+    if (!cp) {
+      cp = { id: '__custom_' + Date.now() + '__', name };
+      customPatterns.push(cp);
+    }
+
+    dates.forEach(d => addToSelection(cp.id, d));
+
+    // パレットを再構築してこのパターンを選択状態に
+    buildPalette();
+    const radio = document.querySelector(`input[name="palette"][value="${CSS.escape(cp.id)}"]`);
+    if (radio) {
+      radio.checked = true;
+      document.querySelectorAll('#palette .palette-btn').forEach(b => b.classList.remove('active'));
+      radio.closest('.palette-btn').classList.add('active');
+    }
+    updateSelectedCells();
+    updateFooter();
+    calendar.refetchEvents();
+    if (onConfirm) onConfirm(cp);
+  };
+
+  document.getElementById('customInputCancel').onclick = () => customInputModalBS.hide();
+
+  customInputModalBS.show();
+  setTimeout(() => input.focus(), 300);
 }
 
 function removeCustomPattern(id) {
@@ -1387,7 +1431,6 @@ function exitInputMode() {
   customPatterns = [];
   document.getElementById('inputToolbar').classList.add('d-none');
   document.getElementById('stickyFooter').classList.add('d-none');
-  document.getElementById('customPatternName').value = '';
   document.getElementById('stopInputBtn').classList.add('d-none');
   document.getElementById('stopInputBtnMobile').classList.add('d-none');
   hideInfoBar();
@@ -1408,7 +1451,10 @@ function toggleDateSelection(dateStr) {
   const patId = getSelectedPatternId();
   if (!patId) return;
 
-  if (patId === '__delete__') {
+  if (patId === '__custom_input__') {
+    showCustomInputModal([dateStr]);
+    return;
+  } else if (patId === '__delete__') {
     const hasEvent = rawEvents.some(ev => {
       const p = ev.extendedProps || {};
       return !p.isHoliday && p.clientName === inputModeClient && toDateStrFromAny(ev.start) === dateStr;
@@ -1509,12 +1555,19 @@ function setupDragSelection(calEl) {
     if (wasD && draggedDates.size > 0) {
       wasDragging = true;
       const dragPatId = getSelectedPatternId();
-      if (dragPatId) draggedDates.forEach(d => addToSelection(dragPatId, d));
-      draggedDates.clear();
-      updateDragHighlight();
-      updateSelectedCells();
-      updateFooter();
-      calendar.refetchEvents();
+      if (dragPatId === '__custom_input__') {
+        const dates = Array.from(draggedDates);
+        draggedDates.clear();
+        updateDragHighlight();
+        showCustomInputModal(dates);
+      } else {
+        if (dragPatId) draggedDates.forEach(d => addToSelection(dragPatId, d));
+        draggedDates.clear();
+        updateDragHighlight();
+        updateSelectedCells();
+        updateFooter();
+        calendar.refetchEvents();
+      }
       setTimeout(() => { wasDragging = false; }, 150);
     }
   });
@@ -1540,9 +1593,15 @@ function selectAllWeekends() {
     const dow = new Date(year, month, d).getDay();
     if (dow === 0 || dow === 6) targets.push(localDateStr(year, month, d));
   }
+  if (targets.length === 0) return;
+
+  if (patId === '__custom_input__') {
+    showCustomInputModal(targets);
+    return;
+  }
 
   const curSet = selectionsByPattern.get(patId) || new Set();
-  const allSelected = targets.length > 0 && targets.every(d => curSet.has(d));
+  const allSelected = targets.every(d => curSet.has(d));
   if (allSelected) {
     targets.forEach(d => curSet.delete(d));
   } else {
@@ -1566,9 +1625,15 @@ function selectHolidays() {
     const [y, m] = dateStr.split('-').map(Number);
     if (y === year && m - 1 === month) targets.push(dateStr);
   });
+  if (targets.length === 0) return;
+
+  if (patId === '__custom_input__') {
+    showCustomInputModal(targets);
+    return;
+  }
 
   const curSet = selectionsByPattern.get(patId) || new Set();
-  const allSelected = targets.length > 0 && targets.every(d => curSet.has(d));
+  const allSelected = targets.every(d => curSet.has(d));
   if (allSelected) {
     targets.forEach(d => curSet.delete(d));
   } else {
@@ -1685,19 +1750,22 @@ function _askSaveCustomPattern(completionMsg, names, idx) {
     return;
   }
   const name = names[idx];
+  const msg = (idx === 0 ? completionMsg + '\n\n' : '') + `「${name}」をパターンとして保存しますか？`;
+
+  // モーダルが完全に閉じてから次を表示（アニメーション競合を防ぐ）
+  const proceed = () => _askSaveCustomPattern(completionMsg, names, idx + 1);
+  document.getElementById('customConfirmModal').addEventListener('hidden.bs.modal', proceed, { once: true });
+
   showConfirm(
-    (idx === 0 ? completionMsg + '\n\n' : '') + `「${name}」をパターンとして保存しますか？`,
+    msg,
     () => {
       google.script.run
-        .withSuccessHandler(() => {
-          reloadPatterns();
-          _askSaveCustomPattern(completionMsg, names, idx + 1);
-        })
+        .withSuccessHandler(() => reloadPatterns())
         .withFailureHandler(handleError)
         .addPattern({ name, color: '#6c757d' });
-    },
-    () => _askSaveCustomPattern(completionMsg, names, idx + 1)
+    }
   );
+  // キャンセル時も proceed を呼ぶ（hidden.bs.modal で自動的に呼ばれる）
 }
 
 // =====================================================================
