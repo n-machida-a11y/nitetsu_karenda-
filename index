@@ -995,6 +995,11 @@ function initCalendar() {
     editable: false,
     displayEventTime: false,
     eventDisplay: 'block',  // 時刻付きイベントもバー表示にして得意先カラーを適用
+    eventOrder: (a, b) => {
+      const orderA = getClientOrder((a.extendedProps || {}).clientName);
+      const orderB = getClientOrder((b.extendedProps || {}).clientName);
+      return orderA - orderB;
+    },
 
     dayCellContent: e => e.dayNumberText.replace('日', ''),
 
@@ -1082,6 +1087,12 @@ function initCalendar() {
 // =====================================================================
 // イベントフィルタリング
 // =====================================================================
+function getClientOrder(clientName) {
+  if (!clientName) return 9999;
+  const c = clients.find(cl => cl.name === clientName);
+  return c ? (c.order ?? 9999) : 9999;
+}
+
 function getFilteredEvents() {
   // 入力モード・通常モード共通: checkedClients でフィルタリング
   // （入力モード中もエリア外のイベントは表示しない）
