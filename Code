@@ -540,10 +540,9 @@
       let added = 0, skipped = 0;
 
       entries.forEach(({ date, patternId, name: customName }) => {
-        // パターン名を解決（__custom__の場合は直接渡されたcustomNameを使用）
+        // パターン名を解決（customNameが渡されている場合はそちらを優先）
         let eventName;
-        if (patternId === '__custom__') {
-          if (!customName) { skipped++; return; }
+        if (customName) {
           eventName = customName;
         } else {
           const pattern = patternMap[patternId];
