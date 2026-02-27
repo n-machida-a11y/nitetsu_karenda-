@@ -752,89 +752,69 @@ document.addEventListener('DOMContentLoaded', () => {
 // =====================================================================
 function loadAllData() {
   showLoading(true);
-  // まず現在のユーザー情報を取得
-  google.script.run
-    .withSuccessHandler(userInfo => {
-      currentUser = userInfo;
-      applyUserUI();
-      // 次にエリアを取得
-      google.script.run
-        .withSuccessHandler(areaData => {
-          areas = areaData || [];
-          renderAreaTabs();
-          // 次にクライアントを取得
-          google.script.run
-            .withSuccessHandler(clientData => {
-              clients = clientData || [];
-              checkedClients = new Set(clients.map(c => c.name));
-              google.script.run
-                .withSuccessHandler(data => {
-                  patterns = data || [];
-                  if (patterns.length === 0) {
-                    google.script.run
-                      .withSuccessHandler(result => {
-                        patterns = (result && result.patterns) || [];
-                        continueLoading();
-                      })
-                      .withFailureHandler(handleError)
-                      .initDefaultPatterns();
-                  } else {
-                    continueLoading();
-                  }
-                })
-                .withFailureHandler(handleError)
-                .getPatterns();
-            })
-            .withFailureHandler(handleError)
-            .getClients();
-        })
-        .withFailureHandler(handleError)
-        .getAreas();
-    })
-    .withFailureHandler(err => {
-      // ユーザー情報取得失敗はviewerとして続行
-      currentUser = { id: '', name: '', email: '', areaId: '', role: 'viewer' };
-      applyUserUI();
-      google.script.run
-        .withSuccessHandler(areaData => {
-          areas = areaData || [];
-          renderAreaTabs();
-          google.script.run
-            .withSuccessHandler(clientData => {
-              clients = clientData || [];
-              checkedClients = new Set(clients.map(c => c.name));
-              google.script.run
-                .withSuccessHandler(data => {
-                  patterns = data || [];
-                  continueLoading();
-                })
-                .withFailureHandler(handleError)
-                .getPatterns();
-            })
-            .withFailureHandler(handleError)
-            .getClients();
-        })
-        .withFailureHandler(handleError)
-        .getAreas();
-    })
-    .getCurrentUserInfo();
-}
-
-function continueLoading() {
-  clientRules = {};
-  clients.forEach(c => { if (c.memo && c.memo.trim()) clientRules[c.name] = c.memo.trim(); });
-
   google.script.run
     .withSuccessHandler(data => {
-      rawEvents = data || [];
+      currentUser = data.userInfo || { id: '', name: '', email: '', areaId: '', role: 'viewer' };
+      areas    = data.areas    || [];
+      clients  = data.clients  || [];
+      patterns = data.patterns || [];
+      rawEvents = data.holidays || [];
+
+      checkedClients = new Set(clients.map(c => c.name));
+      clientRules = {};
+      clients.forEach(c => { if (c.memo && c.memo.trim()) clientRules[c.name] = c.memo.trim(); });
+
+      applyUserUI();
+      renderAreaTabs();
       extractHolidays(rawEvents);
       buildPalette();
       renderSidebar();
       calendar.refetchEvents();
       showLoading(false);
     })
+    .withFailureHandler(err => {
+      // 失敗時はviewerとして旧方式にフォールバック
+      currentUser = { id: '', name: '', email: '', areaId: '', role: 'viewer' };
+      applyUserUI();
+      _loadAllDataFallback();
+    })
+    .getAllInitialData();
+}
+
+function _loadAllDataFallback() {
+  google.script.run
+    .withSuccessHandler(areaData => {
+      areas = areaData || [];
+      renderAreaTabs();
+      google.script.run
+        .withSuccessHandler(clientData => {
+          clients = clientData || [];
+          checkedClients = new Set(clients.map(c => c.name));
+          clientRules = {};
+          clients.forEach(c => { if (c.memo && c.memo.trim()) clientRules[c.name] = c.memo.trim(); });
+          google.script.run
+            .withSuccessHandler(data => {
+              patterns = data || [];
+              google.script.run
+                .withSuccessHandler(evData => {
+                  rawEvents = evData || [];
+                  extractHolidays(rawEvents);
+                  buildPalette();
+                  renderSidebar();
+                  calendar.refetchEvents();
+                  showLoading(false);
+                })
+                .withFailureHandler(handleError)
+                .getHolidays();
+            })
+            .withFailureHandler(handleError)
+            .getPatterns();
+        })
+        .withFailureHandler(handleError)
+        .getClients();
+    })
     .withFailureHandler(handleError)
-    .getHolidays();
+    .getAreas();
 }
 
 /** ユーザー情報に応じてUIを切り替え */
