@@ -1769,7 +1769,6 @@ function clearSelection() {
 function openAttachmentModal(clientName) {
   attachmentModalClient = clientName;
   document.getElementById('attachmentModalTitle').textContent = '📎 ' + clientName + ' - 添付ファイル';
-  document.getElementById('attachmentListEmpty').textContent = '読み込み中...';
   document.getElementById('attachmentList').innerHTML =
     '<div class="text-muted small py-2 text-center" id="attachmentListEmpty">読み込み中...</div>';
   document.getElementById('attachFileInput').value = '';
