@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>使い方マニュアル — 得意先お休み管理カレンダー</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; font-family: "Helvetica Neue", Arial, sans-serif; }
+    .app-header {
+      background: #1565c0; color: #fff;
+      padding: 10px 20px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .app-header h1 { font-size: 1rem; margin: 0; }
+    .app-header .back-link {
+      font-size: 0.85rem; color: rgba(255,255,255,0.85);
+      text-decoration: none; border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 4px; padding: 3px 10px;
+    }
+    .app-header .back-link:hover { background: rgba(255,255,255,0.15); color: #fff; }
+    .content-wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
+    .nav-tabs .nav-link { color: #555; font-weight: 500; }
+    .nav-tabs .nav-link.active { color: #1565c0; font-weight: 700; }
+    /* 模式図 */
+    .screen-diagram { border: 2px solid #dee2e6; border-radius: 8px; overflow: hidden; font-size: 0.8rem; }
+    .diag-header { background: #1565c0; color: #fff; padding: 6px 12px; font-weight: 700; }
+    .diag-body { display: flex; min-height: 200px; }
+    .diag-sidebar { width: 120px; background: #fff; border-right: 2px solid #dee2e6; padding: 8px; flex-shrink: 0; }
+    .diag-main { flex: 1; display: flex; flex-direction: column; }
+    .diag-tabs { background: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: 6px 10px; }
+    .diag-toolbar { background: #fffde7; border-bottom: 2px solid #1565c0; padding: 6px 10px; font-size: 0.75rem; }
+    .diag-calendar { flex: 1; background: #fff; padding: 8px; }
+    .diag-footer { background: #1565c0; color: #fff; padding: 6px 12px; text-align: center; font-size: 0.75rem; }
+    .diag-label {
+      display: inline-block; background: #e3f2fd; color: #1565c0;
+      border: 1px solid #90caf9; border-radius: 4px;
+      padding: 2px 6px; margin: 2px 0; font-size: 0.75rem; font-weight: 600;
+    }
+    .diag-callout { font-size: 0.72rem; color: #888; margin-top: 2px; }
+    /* ステップ */
+    .step-block {
+      display: flex; gap: 12px; align-items: flex-start;
+      padding: 12px 0; border-bottom: 1px solid #f0f0f0;
+    }
+    .step-block:last-child { border-bottom: none; }
+    .step-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #1565c0; color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.85rem; flex-shrink: 0; margin-top: 2px;
+    }
+    .step-body { flex: 1; }
+    .step-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 4px; }
+    .step-desc { font-size: 0.88rem; color: #444; line-height: 1.6; }
+    .btn-label {
+      display: inline-block;
+      background: #1565c0; color: #fff;
+      border-radius: 4px; padding: 1px 8px; font-size: 0.8rem; font-weight: 600;
+    }
+    .btn-label.gray { background: #6c757d; }
+    .btn-label.red  { background: #e53935; }
+    .btn-label.outline { background: #fff; color: #1565c0; border: 1px solid #1565c0; }
+    /* 権限バッジ */
+    .role-badge { display: inline-block; border-radius: 10px; padding: 2px 8px; font-size: 0.78rem; font-weight: 600; }
+    .role-badge.admin  { background: #fff9c4; color: #5d4037; border: 1px solid #fdd835; }
+    .role-badge.area   { background: #e8f5e9; color: #2e7d32; border: 1px solid #66bb6a; }
+    .role-badge.viewer { background: #eceff1; color: #546e7a; border: 1px solid #b0bec5; }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>使い方マニュアル — 得意先お休み管理カレンダー</h1>
+  <a href="javascript:window.close()" class="back-link">&#x2715; 閉じる</a>
+</header>
+
+<div class="content-wrap">
+  <ul class="nav nav-tabs mb-4" id="manualTabs">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-screen">画面の見かた</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-basic">基本操作</button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-admin">管理者向け設定</button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- ===== タブ1: 画面の見かた ===== -->
+    <div class="tab-pane fade show active" id="tab-screen">
+
+      <h2 class="h5 mb-3">画面の構成</h2>
+      <p class="text-muted" style="font-size:0.9rem;">アプリを開くと以下のような画面が表示されます。各エリアの役割を確認してください。</p>
+
+      <!-- 模式図 -->
+      <div class="screen-diagram mb-4">
+        <div class="diag-header">
+          A ヘッダー &nbsp;—&nbsp; アプリのタイトル・設定ボタン・ヘルプボタン
+        </div>
+        <div class="diag-body">
+          <div class="diag-sidebar">
+            <div style="font-weight:700; font-size:0.78rem; margin-bottom:6px; color:#555;">B サイドバー</div>
+            <div class="diag-label" style="width:100%; text-align:center;">株式会社A</div>
+            <div class="diag-callout">&#x2611; 表示/非表示</div>
+            <div class="diag-label" style="width:100%; text-align:center; margin-top:4px;">株式会社B</div>
+            <div class="diag-callout">&#x25B6;入力 ボタン</div>
+          </div>
+          <div class="diag-main">
+            <div class="diag-tabs">C エリアタブ &nbsp;|&nbsp; 東日本 &nbsp;|&nbsp; 西日本</div>
+            <div class="diag-toolbar">D 入力ツールバー（&#x25B6;入力 を押すと表示）— パターン選択・一括選択ボタン</div>
+            <div class="diag-calendar">
+              <div style="font-size:0.78rem; color:#888; font-weight:700; margin-bottom:6px;">E カレンダー本体</div>
+              <div style="font-size:0.72rem; color:#aaa;">日〜土のマス目に休日イベントが表示される</div>
+            </div>
+          </div>
+        </div>
+        <div class="diag-footer">F フッター（一括登録バー）— 日付を選択すると「〇日選択中」と表示され、一括登録できる</div>
+      </div>
+
+      <!-- 各エリア説明 -->
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+              <h6 class="card-title" style="color:#1565c0;">A ヘッダー</h6>
+              <p class="card-text" style="font-size:0.85rem;">
+                アプリ全体のタイトルバーです。
+                右側に <span class="btn-label">&#x2699; 設定</span> ボタン（管理者のみ）と
+                <span class="btn-label outline">? ヘルプ</span> ボタンがあります。
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+              <h6 class="card-title" style="color:#1565c0;">B サイドバー（得意先リスト）</h6>
+              <p class="card-text" style="font-size:0.85rem;">
+                登録されている得意先の一覧です。チェックボックスで表示・非表示を切り替えられます。
+                <span class="btn-label" style="font-size:0.72rem;">&#x25B6; 入力</span> を押すと、その会社の予定を登録するモードに入ります。
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+              <h6 class="card-title" style="color:#1565c0;">C エリアタブ</h6>
+              <p class="card-text" style="font-size:0.85rem;">
+                得意先をエリア（地区）でグループ分けして切り替えるタブです。
+                タブを切り替えると、そのエリアの得意先のみサイドバーに表示されます。
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+              <h6 class="card-title" style="color:#1565c0;">D 入力ツールバー</h6>
+              <p class="card-text" style="font-size:0.85rem;">
+                <span class="btn-label" style="font-size:0.72rem;">&#x25B6; 入力</span> を押したときだけ表示されます。
+                登録するパターン（「休み」「午前不可」など）を選んだり、土日・祝日をまとめて選択するボタンがあります。
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+              <h6 class="card-title" style="color:#1565c0;">E カレンダー本体</h6>
+              <p class="card-text" style="font-size:0.85rem;">
+                月表示のカレンダーです。登録済みの休日・予定がイベントとして表示されます。
+                イベントをクリックすると内容を編集・削除できます。
+                土曜は青・日曜は赤、祝日はピンク背景で表示されます。
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+              <h6 class="card-title" style="color:#1565c0;">F フッター（一括登録バー）</h6>
+              <p class="card-text" style="font-size:0.85rem;">
+                入力モード中に日付を選択すると画面下部に表示されます。
+                「〇日選択中」と選択数が表示され、
+                <span class="btn-label" style="font-size:0.72rem;">一括登録</span> を押すと選択した全日程を一度に登録できます。
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== タブ2: 基本操作 ===== -->
+    <div class="tab-pane fade" id="tab-basic">
+
+      <!-- 操作1: 予定を登録する -->
+      <div class="mb-5">
+        <h2 class="h5 mb-1">予定を登録する</h2>
+        <p class="text-muted" style="font-size:0.85rem; margin-bottom:16px;">得意先の休日・不在予定をカレンダーに登録する手順です。</p>
+        <div class="step-block">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">登録したい得意先の <span class="btn-label" style="font-size:0.8rem;">&#x25B6; 入力</span> を押す</div>
+            <div class="step-desc">サイドバーの得意先名の右にある青いボタンを押します。ボタンが赤の <span class="btn-label red" style="font-size:0.8rem;">&#x25A0; 入力中</span> に変わり、入力ツールバーが表示されれば準備完了です。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">入力ツールバーでパターンを選ぶ</div>
+            <div class="step-desc">「休み」「午前不可」「15時まで」などのパターンボタンから登録したい種別を選択します。選択中のパターンは青枠でハイライトされます。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">カレンダーの日付をクリック（またはドラッグ）して選択する</div>
+            <div class="step-desc">登録したい日をクリックすると青くハイライトされます。複数日を選ぶ場合はそのままドラッグするか、一つずつクリックして選択できます。<br>
+            <span style="color:#1565c0; font-weight:600;">便利な一括選択：</span>
+            <span class="btn-label outline" style="font-size:0.75rem;">&#x1F5D3; 土日を全選択</span>
+            <span class="btn-label outline" style="font-size:0.75rem;">&#x1F38C; 祝日を選択</span> ボタンで月内の土日・祝日をまとめて選べます。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">画面下の <span class="btn-label" style="font-size:0.8rem;">一括登録</span> を押す</div>
+            <div class="step-desc">画面下部に「〇日選択中」と表示されたら <span class="btn-label" style="font-size:0.8rem;">一括登録</span> ボタンを押します。登録が完了するとカレンダーにイベントが表示されます。</div>
+          </div>
+        </div>
+        <div class="alert alert-info py-2 px-3" style="font-size:0.85rem; margin-top:8px;">
+          <strong>ヒント：</strong> 入力モードを終了するには、ツールバー右上の <strong>&#x2715;</strong> ボタンを押すか、サイドバーの <span class="btn-label red" style="font-size:0.75rem;">&#x25A0; 入力中</span> ボタンを再度押してください。
+        </div>
+      </div>
+
+      <!-- 操作2: 予定を編集・削除する -->
+      <div class="mb-5">
+        <h2 class="h5 mb-1">予定を編集・削除する</h2>
+        <p class="text-muted" style="font-size:0.85rem; margin-bottom:16px;">登録済みの予定をあとから変更・削除できます。</p>
+        <div class="step-block">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">カレンダー上のイベントをクリックする</div>
+            <div class="step-desc">変更・削除したいイベント（色付きのバー）をクリックすると編集ダイアログが開きます。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">内容を変更して <span class="btn-label" style="font-size:0.8rem;">保存</span> を押す、または <span class="btn-label red" style="font-size:0.8rem;">削除</span> を押す</div>
+            <div class="step-desc">タイトル・パターン・時刻などを変更して保存できます。不要な予定は削除ボタンで消せます。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 操作3: 表示を絞り込む -->
+      <div class="mb-5">
+        <h2 class="h5 mb-1">表示する得意先を絞り込む</h2>
+        <p class="text-muted" style="font-size:0.85rem; margin-bottom:16px;">得意先が多いときはチェックボックスで表示を絞れます。</p>
+        <div class="step-block">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">サイドバーのチェックボックスを外す</div>
+            <div class="step-desc">得意先名の左のチェックを外すと、その会社のイベントがカレンダーから非表示になります。「全表示」チェックを外すと全件非表示にできます。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">エリアタブで地区を切り替える</div>
+            <div class="step-desc">カレンダー上部のタブをクリックすると、そのエリアの得意先だけサイドバーに表示されます。複数エリアを管理している場合に便利です。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 操作4: 添付ファイルを確認する -->
+      <div class="mb-5">
+        <h2 class="h5 mb-1">添付ファイルを確認する</h2>
+        <p class="text-muted" style="font-size:0.85rem; margin-bottom:16px;">得意先ごとに添付ファイル（PDF・画像など）を管理できます。</p>
+        <div class="step-block">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">サイドバーの <span class="btn-label gray" style="font-size:0.75rem;">&#x1F4CE;</span> ボタンを押す</div>
+            <div class="step-desc">添付ファイルがある会社は青色の <span class="btn-label" style="font-size:0.75rem;">&#x1F4CE;</span> ボタンが表示されています。押すとファイル一覧が開きます。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">ファイル名をクリックして開く、または新しいファイルをアップロードする</div>
+            <div class="step-desc">ファイルはGoogle ドライブに保存されます。ドメイン内のユーザーと共有されます。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== タブ3: 管理者向け設定 ===== -->
+    <div class="tab-pane fade" id="tab-admin">
+
+      <div class="alert alert-warning py-2 px-3 mb-4" style="font-size:0.85rem;">
+        <strong>管理者権限が必要です。</strong> このタブの操作はヘッダーに <span class="btn-label" style="font-size:0.75rem;">&#x2699; 設定</span> ボタンが表示されているユーザーのみ行えます。
+      </div>
+
+      <!-- ユーザー権限の説明 -->
+      <div class="mb-5">
+        <h2 class="h5 mb-3">ユーザー権限の種類</h2>
+        <div class="table-responsive">
+          <table class="table table-bordered" style="font-size:0.85rem;">
+            <thead class="table-light">
+              <tr>
+                <th>権限</th>
+                <th>できること</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="role-badge admin">管理者 (admin)</span></td>
+                <td>全操作可能（得意先・パターン・エリア・ユーザーの管理を含む）</td>
+              </tr>
+              <tr>
+                <td><span class="role-badge area">エリア担当 (area)</span></td>
+                <td>担当エリアの予定の閲覧・登録・編集・削除</td>
+              </tr>
+              <tr>
+                <td><span class="role-badge viewer">閲覧のみ (viewer)</span></td>
+                <td>カレンダーの閲覧のみ（登録・編集・削除は不可）</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 設定モーダルの開き方 -->
+      <div class="mb-4">
+        <h2 class="h5 mb-2">設定画面の開き方</h2>
+        <p style="font-size:0.88rem;">ヘッダー右上の <span class="btn-label" style="font-size:0.8rem;">&#x2699; 設定</span> ボタンをクリックすると設定モーダルが開きます。設定は4つのタブに分かれています。</p>
+      </div>
+
+      <!-- 会社管理 -->
+      <div class="mb-5">
+        <h2 class="h5 mb-1">得意先（会社）の管理</h2>
+        <p class="text-muted" style="font-size:0.85rem; margin-bottom:12px;">設定モーダルの「会社管理」タブで操作します。</p>
+        <div class="step-block">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">会社を追加する</div>
+            <div class="step-desc">「会社管理」タブ下部の入力欄に会社名を入力して <span class="btn-label" style="font-size:0.75rem;">追加</span> を押します。エリアも同時に選択できます。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">会社名・エリアを編集する</div>
+            <div class="step-desc">一覧の会社名をクリックするとアコーディオンが開き、名前やエリアを変更できます。変更後 <span class="btn-label" style="font-size:0.75rem;">保存</span> を押してください。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">表示順を変更する</div>
+            <div class="step-desc">一覧左端の <strong>&#x2807;</strong>（ドラッグハンドル）をつかんで上下にドラッグすると並び替えられます。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">会社を削除する</div>
+            <div class="step-desc">アコーディオンを開き <span class="btn-label red" style="font-size:0.75rem;">削除</span> を押します。<br>
+            <span style="color:#c62828; font-size:0.82rem;"><strong>注意：</strong> 会社を削除してもその会社に登録済みの予定は削除されません。不要な予定は別途カレンダーから削除してください。</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- パターン管理 -->
+      <div class="mb-5">
+        <h2 class="h5 mb-1">パターン（休み区分）の管理</h2>
+        <p class="text-muted" style="font-size:0.85rem; margin-bottom:12px;">設定モーダルの「パターン管理」タブで操作します。パターンとは「休み」「午前不可」など登録時に選ぶ休日の種別です。</p>
+        <ul style="font-size:0.88rem; line-height:1.8; padding-left:1.2rem;">
+          <li><strong>追加：</strong> 下部の入力欄に名前・開始時刻・終了時刻・色を入力して <span class="btn-label" style="font-size:0.75rem;">追加</span></li>
+          <li><strong>編集：</strong> 一覧の項目をクリックして変更後 <span class="btn-label" style="font-size:0.75rem;">保存</span></li>
+          <li><strong>削除：</strong> 項目を開いて <span class="btn-label red" style="font-size:0.75rem;">削除</span></li>
+        </ul>
+      </div>
+
+      <!-- エリア管理 -->
+      <div class="mb-5">
+        <h2 class="h5 mb-1">エリアの管理</h2>
+        <p class="text-muted" style="font-size:0.85rem; margin-bottom:12px;">設定モーダルの「エリア管理」タブで操作します。エリアは得意先をグループ分けする単位です（例：東日本・西日本）。</p>
+        <ul style="font-size:0.88rem; line-height:1.8; padding-left:1.2rem;">
+          <li><strong>追加：</strong> 入力欄にエリア名を入力して <span class="btn-label" style="font-size:0.75rem;">追加</span></li>
+          <li><strong>編集・削除：</strong> 一覧の各エリアで操作</li>
+          <li><strong>注意：</strong> エリアを削除する前に、そのエリアに所属する会社を別のエリアに移動させてください</li>
+        </ul>
+      </div>
+
+      <!-- ユーザー管理 -->
+      <div class="mb-5">
+        <h2 class="h5 mb-1">ユーザーの管理</h2>
+        <p class="text-muted" style="font-size:0.85rem; margin-bottom:12px;">設定モーダルの「ユーザー管理」タブで操作します（管理者のみ表示）。</p>
+        <div class="step-block">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">ユーザーを追加する</div>
+            <div class="step-desc">名前・メールアドレス・権限・担当エリアを入力して <span class="btn-label" style="font-size:0.75rem;">追加</span> を押します。メールアドレスは Google アカウントのものを入力してください。</div>
+          </div>
+        </div>
+        <div class="step-block">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">権限・担当エリアを変更する</div>
+            <div class="step-desc">一覧から対象ユーザーを選んで編集します。<br>
+            <strong>担当エリア（閲覧）：</strong> 空欄にすると全エリアが見えます<br>
+            <strong>担当エリア（編集）：</strong> 空欄にすると編集できません</div>
+          </div>
+        </div>
+        <div class="alert alert-info py-2 px-3 mt-2" style="font-size:0.85rem;">
+          <strong>ヒント：</strong> 登録されていないメールアドレスでアクセスしたユーザーは自動的に「閲覧のみ」扱いになります。
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
