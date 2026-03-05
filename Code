@@ -13,6 +13,12 @@
   // Web アプリのエントリポイント
   // =====================================================================
   function doGet(e) {
+    const page = e && e.parameter && e.parameter.page;
+    if (page === 'manual') {
+      return HtmlService.createHtmlOutputFromFile('manual')
+        .setTitle('使い方マニュアル — 得意先お休み管理カレンダー')
+        .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    }
     return HtmlService.createHtmlOutputFromFile('index')
       .setTitle('得意先お休み管理カレンダー')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
