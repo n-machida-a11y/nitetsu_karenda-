@@ -79,7 +79,7 @@
     }
     .attach-btn:hover { background: #e0e0e0; }
     .attach-btn.has-attachments {
-      background: #e3f2fd; color: #1565c0;
+      background: #90caf9; color: #1565c0;
       border-color: #90caf9; font-weight: 600;
     }
     .attach-btn.has-attachments:hover { background: #bbdefb; }
