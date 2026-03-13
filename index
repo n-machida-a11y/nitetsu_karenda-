@@ -1909,8 +1909,6 @@ function openAttachmentModal(clientName) {
   document.getElementById('attachFileInput').value = '';
   document.getElementById('attachMemoInput').value = '';
   document.getElementById('attachUploadStatus').textContent = '';
-  // 編集権限がない場合はアップロードフォームを非表示
-  document.getElementById('attachUploadSection').style.display = canEdit(clientName) ? '' : 'none';
   attachmentModal.show();
   google.script.run
     .withSuccessHandler(files => renderAttachmentList(files))
