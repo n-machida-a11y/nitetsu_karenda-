@@ -794,12 +794,28 @@
     }
   }
 
+  /** 現在のユーザーが指定会社を編集できるか確認するヘルパー */
+  function canEditClient_(clientName) {
+    const userInfo = getCurrentUserInfo();
+    if (!userInfo) return false;
+    if (userInfo.isAdmin) return true;
+    const editAreas = String(userInfo.editableAreas || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (editAreas.length === 0) return false;
+    const allClients = getClients();
+    const client = allClients.find(c => c.name === clientName);
+    if (!client || !client.areaId) return false;
+    return editAreas.includes(client.areaId);
+  }
+
   /**
    * 添付ファイルをDriveにアップロードしてシートに記録する
    * @param {{ clientName:string, fileName:string, mimeType:string, base64Data:string, memo:string }} payload
    */
   function uploadAttachment(payload) {
     try {
+      if (!canEditClient_(payload.clientName)) {
+        return { status: 'error', message: 'この会社への添付ファイル追加権限がありません' };
+      }
       const decoded = Utilities.base64Decode(payload.base64Data);
       const blob    = Utilities.newBlob(decoded, payload.mimeType, payload.fileName);
       const folder  = getOrCreateAttachmentFolder_();
@@ -829,6 +845,11 @@
       const rows = sheet.getRange(2, 1, lastRow - 1, 4).getValues();
       for (let i = 0; i < rows.length; i++) {
         if (String(rows[i][0]) === String(id)) {
+          // 削除前に会社名で権限チェック（列2 = 会社名）
+          const clientName = String(rows[i][1]);
+          if (!canEditClient_(clientName)) {
+            return { status: 'error', message: 'この会社への添付ファイル削除権限がありません' };
+          }
           const fileId = String(rows[i][3]);
           try { DriveApp.getFileById(fileId).setTrashed(true); } catch (e) { /* 既に存在しない場合は無視 */ }
           sheet.deleteRow(i + 2);

@@ -263,8 +263,8 @@
     .role-label.area   { background: #e8f5e9; color: #2e7d32; border: 1px solid #66bb6a; }
     .role-label.viewer { background: #eceff1; color: #546e7a; border: 1px solid #b0bec5; }
 
-    /* 設定モーダルの上に必ず重なるよう z-index を高く設定 */
-    #editModal, #customAlertModal, #customConfirmModal { z-index: 1090 !important; }
+    /* 設定モーダル・添付ファイルモーダルの上に必ず重なるよう z-index を高く設定 */
+    #editModal, #customAlertModal, #customConfirmModal, #customInputModal { z-index: 1100 !important; }
 
     /* ===== モバイル ===== */
     @media (max-width: 767px) {
@@ -367,7 +367,7 @@
 </div>
 
 <!-- カスタムアラートモーダル -->
-<div class="modal fade" id="customAlertModal" tabindex="-1" style="z-index:1090">
+<div class="modal fade" id="customAlertModal" tabindex="-1" style="z-index:1100">
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-body py-3 px-4">
@@ -381,7 +381,7 @@
 </div>
 
 <!-- 自由入力名入力モーダル -->
-<div class="modal fade" id="customInputModal" tabindex="-1" style="z-index:1090">
+<div class="modal fade" id="customInputModal" tabindex="-1" style="z-index:1100">
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-body py-3 px-4">
@@ -398,7 +398,7 @@
 </div>
 
 <!-- カスタム確認モーダル -->
-<div class="modal fade" id="customConfirmModal" tabindex="-1" style="z-index:1090">
+<div class="modal fade" id="customConfirmModal" tabindex="-1" style="z-index:1100">
   <div class="modal-dialog modal-sm modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-body py-3 px-4">
@@ -593,7 +593,7 @@
           <div class="text-muted small py-2 text-center" id="attachmentListEmpty">読み込み中...</div>
         </div>
         <!-- アップロードフォーム -->
-        <div class="border rounded p-2" style="background:#f9f9f9;">
+        <div id="attachUploadSection" class="border rounded p-2" style="background:#f9f9f9;">
           <div class="fw-semibold mb-2" style="font-size:0.85rem;">ファイルを追加</div>
           <div class="d-flex gap-2 flex-wrap align-items-end">
             <div>
@@ -693,7 +693,7 @@ let settingsModal, editModalBS, customAlertModal, customConfirmModal, customInpu
 function showLoading(v) { document.getElementById('loadingOverlay').classList.toggle('d-none', !v); }
 
 function escHtml(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function toDateStr(date) {
@@ -777,12 +777,12 @@ document.addEventListener('DOMContentLoaded', () => {
   customInputModalBS = new bootstrap.Modal(document.getElementById('customInputModal'));
   attachmentModal    = new bootstrap.Modal(document.getElementById('attachmentModal'));
 
-  // 設定モーダルの上に重なるモーダルのバックドロップを前面に出す
+  // 設定モーダル・添付ファイルモーダルの上に重なるモーダルのバックドロップを前面に出す
   ['editModal','customAlertModal','customConfirmModal','customInputModal','attachmentModal'].forEach(id => {
     document.getElementById(id).addEventListener('show.bs.modal', () => {
       setTimeout(() => {
         const bds = document.querySelectorAll('.modal-backdrop');
-        if (bds.length > 0) bds[bds.length - 1].style.zIndex = '1089';
+        if (bds.length > 0) bds[bds.length - 1].style.zIndex = '1099';
       }, 0);
     });
   });
@@ -1901,6 +1901,8 @@ function openAttachmentModal(clientName) {
   document.getElementById('attachFileInput').value = '';
   document.getElementById('attachMemoInput').value = '';
   document.getElementById('attachUploadStatus').textContent = '';
+  // 編集権限がない場合はアップロードフォームを非表示
+  document.getElementById('attachUploadSection').style.display = canEdit(clientName) ? '' : 'none';
   attachmentModal.show();
   google.script.run
     .withSuccessHandler(files => renderAttachmentList(files))
