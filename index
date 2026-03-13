@@ -777,8 +777,16 @@ document.addEventListener('DOMContentLoaded', () => {
   customInputModalBS = new bootstrap.Modal(document.getElementById('customInputModal'));
   attachmentModal    = new bootstrap.Modal(document.getElementById('attachmentModal'));
 
-  // 設定モーダル・添付ファイルモーダルの上に重なるモーダルのバックドロップを前面に出す
-  ['editModal','customAlertModal','customConfirmModal','customInputModal','attachmentModal'].forEach(id => {
+  // 設定モーダルの上に重なる attachmentModal のバックドロップ（1089 = 設定モーダルより前、添付モーダルより後ろ）
+  document.getElementById('attachmentModal').addEventListener('show.bs.modal', () => {
+    setTimeout(() => {
+      const bds = document.querySelectorAll('.modal-backdrop');
+      if (bds.length > 0) bds[bds.length - 1].style.zIndex = '1089';
+    }, 0);
+  });
+
+  // 添付ファイルモーダルの上に重なるモーダルのバックドロップ（1099 = 添付モーダル(1090)より前、確認モーダル(1100)より後ろ）
+  ['editModal','customAlertModal','customConfirmModal','customInputModal'].forEach(id => {
     document.getElementById(id).addEventListener('show.bs.modal', () => {
       setTimeout(() => {
         const bds = document.querySelectorAll('.modal-backdrop');
