@@ -8,6 +8,7 @@
   const USER_SHEET_NAME       = 'Users';
   const ATTACHMENT_SHEET_NAME = 'Attachments';
   const ATTACHMENT_FOLDER_NAME = '得意先添付ファイル';
+  const HISTORY_SHEET_NAME     = 'History';
 
   // =====================================================================
   // Web アプリのエントリポイント
@@ -106,6 +107,57 @@
   }
 
   // =====================================================================
+  // 編集履歴
+  // =====================================================================
+
+  /** 操作履歴を1行記録する（内部関数） */
+  function addHistory_(category, action, clientName, detail) {
+    try {
+      const sheet = getOrCreateSheet_(HISTORY_SHEET_NAME,
+        ['操作日時', 'ユーザー名', '操作種別', '対象カテゴリ', '対象会社名', '具体的な内容']);
+      const userName = (function() {
+        try {
+          const email = Session.getActiveUser().getEmail();
+          const users = getUsers();
+          const u = users.find(function(u) { return u.email.toLowerCase() === email.toLowerCase(); });
+          return u ? u.name : email;
+        } catch (e) { return '不明'; }
+      })();
+      sheet.appendRow([new Date(), userName, action, category, clientName || '', detail || '']);
+    } catch (e) {
+      console.error('履歴記録エラー', e);
+    }
+  }
+
+  /** 操作履歴を取得する（管理者・編集者のみ） */
+  function getHistory(limit) {
+    try {
+      const userInfo = getCurrentUserInfo();
+      if (!userInfo.isAdmin && !String(userInfo.editableAreas || '').trim()) {
+        return { status: 'error', message: '閲覧権限がありません' };
+      }
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HISTORY_SHEET_NAME);
+      if (!sheet || sheet.getLastRow() < 2) return { status: 'success', records: [] };
+      const maxRows = Math.min(limit || 200, sheet.getLastRow() - 1);
+      const startRow = Math.max(2, sheet.getLastRow() - maxRows + 1);
+      const rows = sheet.getRange(startRow, 1, sheet.getLastRow() - startRow + 1, 6).getValues();
+      const records = rows.filter(function(r) { return r[0]; }).map(function(r) {
+        return {
+          datetime: r[0] ? Utilities.formatDate(new Date(r[0]), 'JST', 'yyyy/MM/dd HH:mm:ss') : '',
+          userName: String(r[1] || ''),
+          action:   String(r[2] || ''),
+          category: String(r[3] || ''),
+          clientName: String(r[4] || ''),
+          detail:   String(r[5] || '')
+        };
+      }).reverse();
+      return { status: 'success', records: records };
+    } catch (e) {
+      return { status: 'error', message: e.toString() };
+    }
+  }
+
+  // =====================================================================
   // 初期データ一括取得（起動時の複数RPC呼び出しを1回にまとめる）
   // =====================================================================
   function getAllInitialData() {
@@ -171,6 +223,7 @@
       const sheet = getOrCreateSheet_(AREA_SHEET_NAME, ['ID', 'エリア名']);
       const id = Utilities.getUuid();
       sheet.appendRow([id, data.name]);
+      addHistory_('エリア', '登録', '', 'エリア「' + data.name + '」を追加');
       return { status: 'success', id };
     } catch (e) {
       return { status: 'error', message: e.toString() };
@@ -186,7 +239,9 @@
       const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
       for (let i = 0; i < ids.length; i++) {
         if (String(ids[i][0]) === String(data.id)) {
+          const oldName = sheet.getRange(i + 2, 2).getValue();
           sheet.getRange(i + 2, 2).setValue(data.name);
+          addHistory_('エリア', '変更', '', 'エリア「' + oldName + '」→「' + data.name + '」に変更');
           return { status: 'success' };
         }
       }
@@ -202,10 +257,12 @@
       if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return { status: 'error', message: '見つかりません' };
-      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      for (let i = ids.length - 1; i >= 0; i--) {
-        if (String(ids[i][0]) === String(id)) {
+      const data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (let i = data.length - 1; i >= 0; i--) {
+        if (String(data[i][0]) === String(id)) {
+          const areaName = String(data[i][1]);
           sheet.deleteRow(i + 2);
+          addHistory_('エリア', '削除', '', 'エリア「' + areaName + '」を削除');
           return { status: 'success' };
         }
       }
@@ -244,6 +301,7 @@
       const sheet = getOrCreateSheet_(USER_SHEET_NAME, ['ID', '名前', 'メールアドレス', '管理者', '表示エリアID', '編集エリアID']);
       const id = Utilities.getUuid();
       sheet.appendRow([id, data.name, data.email || '', data.isAdmin ? true : false, data.viewableAreas || '', data.editableAreas || '']);
+      addHistory_('ユーザー', '登録', '', 'ユーザー「' + data.name + '」(' + (data.email || '') + ')を追加');
       return { status: 'success', id };
     } catch (e) {
       return { status: 'error', message: e.toString() };
@@ -266,6 +324,7 @@
             data.name, data.email || '', data.isAdmin ? true : false,
             data.viewableAreas || '', data.editableAreas || ''
           ]]);
+          addHistory_('ユーザー', '変更', '', 'ユーザー「' + data.name + '」の情報を変更');
           return { status: 'success' };
         }
       }
@@ -281,10 +340,12 @@
       if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return { status: 'error', message: '見つかりません' };
-      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      for (let i = ids.length - 1; i >= 0; i--) {
-        if (String(ids[i][0]) === String(id)) {
+      const rows = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (String(rows[i][0]) === String(id)) {
+          const userName = String(rows[i][1]);
           sheet.deleteRow(i + 2);
+          addHistory_('ユーザー', '削除', '', 'ユーザー「' + userName + '」を削除');
           return { status: 'success' };
         }
       }
@@ -378,6 +439,7 @@
           .forEach(r => { if (r[0] !== '') maxOrder = Math.max(maxOrder, Number(r[0]) || 0); });
       }
       sheet.appendRow([id, data.name, data.memo || '', data.areaId || '', data.color || '', maxOrder + 10]);
+      addHistory_('会社', '登録', data.name, '会社「' + data.name + '」を追加');
       return { status: 'success', id };
     } catch (e) {
       return { status: 'error', message: e.toString() };
@@ -398,9 +460,11 @@
       const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
       for (let i = 0; i < ids.length; i++) {
         if (String(ids[i][0]) === String(data.id)) {
+          const oldName = String(sheet.getRange(i + 2, 2).getValue());
           sheet.getRange(i + 2, 2, 1, 4).setValues([[
             data.name, data.memo || '', data.areaId || '', data.color || ''
           ]]);
+          addHistory_('会社', '変更', data.name, '会社「' + oldName + '」の情報を変更');
           return { status: 'success' };
         }
       }
@@ -416,10 +480,12 @@
       if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return { status: 'error', message: '見つかりません' };
-      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      for (let i = ids.length - 1; i >= 0; i--) {
-        if (String(ids[i][0]) === String(id)) {
+      const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (String(rows[i][0]) === String(id)) {
+          const clientName = String(rows[i][1]);
           sheet.deleteRow(i + 2);
+          addHistory_('会社', '削除', clientName, '会社「' + clientName + '」を削除');
           return { status: 'success' };
         }
       }
@@ -511,6 +577,7 @@
       const nextRow = sheet.getLastRow() + 1;
       sheet.getRange(nextRow, 3, 1, 2).setNumberFormat('@');
       sheet.getRange(nextRow, 1, 1, 6).setValues([[id, data.name, 'allday', '', data.color || '#6c757d', order]]);
+      addHistory_('パターン', '登録', '', 'パターン「' + data.name + '」を追加');
       return { status: 'success', id };
     } catch (e) {
       return { status: 'error', message: e.toString() };
@@ -526,12 +593,14 @@
       const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
       for (let i = 0; i < ids.length; i++) {
         if (String(ids[i][0]) === String(data.id)) {
+          const oldName = String(sheet.getRange(i + 2, 2).getValue());
           sheet.getRange(i + 2, 3, 1, 2).setNumberFormat('@');
           sheet.getRange(i + 2, 2, 1, 5).setValues([[
             data.name, 'allday', '',
             data.color || '#6c757d',
             (data.order != null) ? Number(data.order) : (i + 1)
           ]]);
+          addHistory_('パターン', '変更', '', 'パターン「' + oldName + '」→「' + data.name + '」に変更');
           return { status: 'success' };
         }
       }
@@ -547,10 +616,12 @@
       if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return { status: 'error', message: '見つかりません' };
-      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      for (let i = ids.length - 1; i >= 0; i--) {
-        if (String(ids[i][0]) === String(id)) {
+      const rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (String(rows[i][0]) === String(id)) {
+          const patternName = String(rows[i][1]);
           sheet.deleteRow(i + 2);
+          addHistory_('パターン', '削除', '', 'パターン「' + patternName + '」を削除');
           return { status: 'success' };
         }
       }
@@ -646,6 +717,8 @@
 
       if (newRows.length > 0) {
         sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 7).setValues(newRows);
+        const dateList = newRows.map(function(r) { return Utilities.formatDate(new Date(r[2]), 'JST', 'M/d'); }).join(', ');
+        addHistory_('お休み予定', '一括登録', clientName, added + '件登録（' + dateList + '）');
       }
       return { status: 'success', added, skipped };
     } catch (e) {
@@ -682,6 +755,10 @@
       for (let i = rowsToDelete.length - 1; i >= 0; i--) {
         sheet.deleteRow(rowsToDelete[i]);
       }
+      if (rowsToDelete.length > 0) {
+        const dateList = dates.sort().map(function(d) { var p = d.split('-'); return Number(p[1]) + '/' + Number(p[2]); }).join(', ');
+        addHistory_('お休み予定', '一括削除', clientName, rowsToDelete.length + '件削除（' + dateList + '）');
+      }
       return { status: 'success', deleted: rowsToDelete.length };
     } catch (e) {
       return { status: 'error', message: e.toString() };
@@ -700,6 +777,7 @@
       const e_ = event.end ? new Date(event.end) : new Date(s.getTime() + 86400000);
       const id = Utilities.getUuid();
       sheet.appendRow([id, event.title, s, e_, clientName, '', color]);
+      addHistory_('お休み予定', '登録', clientName, '「' + event.title + '」を登録（' + Utilities.formatDate(s, 'JST', 'M/d') + '）');
       return { status: 'success', id };
     } catch (e) {
       return { status: 'error', message: e.toString() };
@@ -717,6 +795,7 @@
           const s = new Date(event.start);
           const e_ = event.end ? new Date(event.end) : new Date(s.getTime() + 86400000);
           sheet.getRange(i + 2, 2, 1, 6).setValues([[event.title, s, e_, clientName, '', color]]);
+          addHistory_('お休み予定', '変更', clientName, '「' + event.title + '」に変更（' + Utilities.formatDate(s, 'JST', 'M/d') + '）');
           return { status: 'success' };
         }
       }
@@ -732,10 +811,13 @@
       if (!sheet) return { status: 'error', message: 'シートが見つかりません' };
       const lastRow = sheet.getLastRow();
       if (lastRow < 2) return { status: 'error', message: '見つかりません' };
-      const ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
-      for (let i = 0; i < ids.length; i++) {
-        if (String(ids[i][0]) === String(id)) {
+      const rows = sheet.getRange(2, 1, lastRow - 1, 5).getValues();
+      for (let i = 0; i < rows.length; i++) {
+        if (String(rows[i][0]) === String(id)) {
+          const oldTitle = String(rows[i][1]);
+          const clientName = String(rows[i][4] || '');
           sheet.getRange(i + 2, 2).setValue(newTitle);
+          addHistory_('お休み予定', '変更', clientName, '「' + oldTitle + '」→「' + newTitle + '」に変更');
           return { status: 'success' };
         }
       }
@@ -748,10 +830,14 @@
   function deleteHoliday(eventId) {
     try {
       const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-      const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getValues();
+      const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 5).getValues();
       for (let i = 0; i < data.length; i++) {
         if (String(data[i][0]) === String(eventId)) {
+          const title = String(data[i][1]);
+          const clientName = String(data[i][4] || '');
+          const startDate = data[i][2] ? Utilities.formatDate(new Date(data[i][2]), 'JST', 'M/d') : '';
           sheet.deleteRow(i + 2);
+          addHistory_('お休み予定', '削除', clientName, '「' + title + '」を削除（' + startDate + '）');
           return { status: 'success' };
         }
       }
@@ -829,6 +915,7 @@
         ['ID', '会社名', 'ファイル名', 'DriveファイルID', 'アップロード日時', 'メモ']);
       const id = Utilities.getUuid();
       sheet.appendRow([id, payload.clientName, payload.fileName, file.getId(), new Date(), payload.memo || '']);
+      addHistory_('添付ファイル', '追加', payload.clientName, '「' + payload.fileName + '」をアップロード');
       return { status: 'success', id: id, fileId: file.getId(), fileName: payload.fileName };
     } catch (e) {
       return { status: 'error', message: e.toString() };
@@ -851,8 +938,10 @@
             return { status: 'error', message: 'この会社への添付ファイル削除権限がありません' };
           }
           const fileId = String(rows[i][3]);
+          const fileName = String(rows[i][2]);
           try { DriveApp.getFileById(fileId).setTrashed(true); } catch (e) { /* 既に存在しない場合は無視 */ }
           sheet.deleteRow(i + 2);
+          addHistory_('添付ファイル', '削除', clientName, '「' + fileName + '」を削除');
           return { status: 'success' };
         }
       }

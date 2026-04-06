@@ -289,6 +289,7 @@
   <h1>製鋼メーカーカレンダー</h1>
   <div class="header-right">
     <span id="userBadge" style="display:none"></span>
+    <button id="historyBtn" style="display:none">履歴</button>
     <button id="settingsBtn" style="display:none">⚙ 設定</button>
     <button id="helpBtn" onclick="openHelp()">? ヘルプ</button>
   </div>
@@ -637,6 +638,40 @@
   </div>
 </div>
 
+<!-- ===== 操作履歴モーダル ===== -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title">操作履歴</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body px-3 py-2">
+        <div id="historyTableWrap" style="max-height:500px; overflow-y:auto;">
+          <table class="table table-sm table-striped table-hover" style="font-size:0.85rem;">
+            <thead style="position:sticky;top:0;background:#fff;z-index:1;">
+              <tr>
+                <th style="white-space:nowrap;">操作日時</th>
+                <th style="white-space:nowrap;">ユーザー名</th>
+                <th style="white-space:nowrap;">操作種別</th>
+                <th style="white-space:nowrap;">対象カテゴリ</th>
+                <th style="white-space:nowrap;">対象会社名</th>
+                <th>具体的な内容</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody">
+              <tr><td colspan="6" class="text-center text-muted py-3">読み込み中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 // マニュアル URL（GAS デプロイ後に実際の URL に差し替える）
@@ -685,7 +720,7 @@ let pointerDownDate = null;
 let draggedDates  = new Set();
 
 // Bootstrap モーダルインスタンス
-let settingsModal, editModalBS, customAlertModal, customConfirmModal, customInputModalBS;
+let settingsModal, editModalBS, customAlertModal, customConfirmModal, customInputModalBS, historyModalBS;
 
 // =====================================================================
 // ユーティリティ
@@ -776,6 +811,7 @@ document.addEventListener('DOMContentLoaded', () => {
   customConfirmModal = new bootstrap.Modal(document.getElementById('customConfirmModal'));
   customInputModalBS = new bootstrap.Modal(document.getElementById('customInputModal'));
   attachmentModal    = new bootstrap.Modal(document.getElementById('attachmentModal'));
+  historyModalBS     = new bootstrap.Modal(document.getElementById('historyModal'));
 
   // 設定モーダルの上に重なる attachmentModal のバックドロップ（1089 = 設定モーダルより前、添付モーダルより後ろ）
   document.getElementById('attachmentModal').addEventListener('show.bs.modal', () => {
@@ -797,6 +833,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initCalendar();
 
+  document.getElementById('historyBtn').addEventListener('click', openHistory);
   document.getElementById('settingsBtn').addEventListener('click', openSettings);
   document.getElementById('exitInputModeBtn').addEventListener('click', exitInputMode);
   document.getElementById('bulkRegisterBtn').addEventListener('click', bulkRegister);
@@ -942,6 +979,8 @@ function applyUserUI() {
     badge.textContent = currentUser.isAdmin ? displayName + '（管理者）' : displayName;
     badge.style.display = '';
   }
+  // 履歴ボタン（管理者 or 編集エリアが設定されているユーザー）
+  document.getElementById('historyBtn').style.display = canOpenSettings() ? '' : 'none';
   // 設定ボタン（管理者 or 編集エリアが設定されているユーザー）
   document.getElementById('settingsBtn').style.display = canOpenSettings() ? '' : 'none';
   // ユーザー管理タブ（管理者のみ）
@@ -982,6 +1021,44 @@ function handleError(err) {
   showLoading(false);
   console.error('GASエラー:', err);
   showAlert('エラーが発生しました: ' + (err.message || JSON.stringify(err)));
+}
+
+// =====================================================================
+// 操作履歴
+// =====================================================================
+function openHistory() {
+  document.getElementById('historyTableBody').innerHTML =
+    '<tr><td colspan="6" class="text-center text-muted py-3">読み込み中...</td></tr>';
+  historyModalBS.show();
+  google.script.run
+    .withSuccessHandler(function(result) {
+      if (result.status !== 'success') {
+        document.getElementById('historyTableBody').innerHTML =
+          '<tr><td colspan="6" class="text-center text-muted py-3">' + escHtml(result.message || 'エラー') + '</td></tr>';
+        return;
+      }
+      var records = result.records || [];
+      if (records.length === 0) {
+        document.getElementById('historyTableBody').innerHTML =
+          '<tr><td colspan="6" class="text-center text-muted py-3">操作履歴はまだありません</td></tr>';
+        return;
+      }
+      document.getElementById('historyTableBody').innerHTML = records.map(function(r) {
+        return '<tr>'
+          + '<td style="white-space:nowrap;">' + escHtml(r.datetime) + '</td>'
+          + '<td style="white-space:nowrap;">' + escHtml(r.userName) + '</td>'
+          + '<td style="white-space:nowrap;">' + escHtml(r.action) + '</td>'
+          + '<td style="white-space:nowrap;">' + escHtml(r.category) + '</td>'
+          + '<td style="white-space:nowrap;">' + escHtml(r.clientName) + '</td>'
+          + '<td>' + escHtml(r.detail) + '</td>'
+          + '</tr>';
+      }).join('');
+    })
+    .withFailureHandler(function(err) {
+      document.getElementById('historyTableBody').innerHTML =
+        '<tr><td colspan="6" class="text-center text-danger py-3">エラー: ' + escHtml(err.message || String(err)) + '</td></tr>';
+    })
+    .getHistory(200);
 }
 
 function reloadEvents() {
