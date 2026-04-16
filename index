@@ -387,7 +387,7 @@
     <div class="modal-content">
       <div class="modal-body py-3 px-4">
         <label class="form-label form-label-sm mb-1">イベント名</label>
-        <input type="text" id="customInputName" class="form-control form-control-sm" placeholder="例: 担当者不在">
+        <textarea id="customInputName" class="form-control form-control-sm" rows="3" placeholder="例: ダライ粉荷止め7:00～21:00&#10;（ダンプ車のみ荷受け可）" style="resize:vertical;"></textarea>
         <div class="text-muted small mt-1" id="customInputDateHint"></div>
       </div>
       <div class="modal-footer py-2 justify-content-between border-0">
@@ -572,7 +572,7 @@
     <button id="eventPopoverClose" style="background:none;border:none;font-size:0.9rem;cursor:pointer;color:#888;padding:0 2px;flex-shrink:0;">✕</button>
   </div>
   <div style="padding:10px 12px;">
-    <input type="text" id="eventPopoverInput" class="form-control form-control-sm mb-2">
+    <textarea id="eventPopoverInput" class="form-control form-control-sm mb-2" rows="3" style="resize:vertical;"></textarea>
     <div class="d-flex justify-content-between">
       <button id="eventPopoverSave" class="btn btn-sm btn-primary" style="min-width:72px;">保存</button>
       <button id="eventPopoverDelete" class="btn btn-sm btn-outline-danger" style="min-width:72px;">削除</button>
@@ -887,7 +887,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('eventPopoverSave').addEventListener('click', saveEventTitle);
   document.getElementById('eventPopoverDelete').addEventListener('click', confirmDeleteEventFromPopover);
   document.getElementById('eventPopoverInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') saveEventTitle();
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveEventTitle(); }
     if (e.key === 'Escape') closeEventPopover();
   });
   document.addEventListener('click', e => {
@@ -1217,7 +1217,7 @@ function initCalendar() {
     eventContent: arg => {
       const props = arg.event.extendedProps || {};
       if (props.isHoliday) {
-        return { html: `<div class="ev-wrap text-danger" style="pointer-events:none">${escHtml(arg.event.title)}</div>` };
+        return { html: `<div class="ev-wrap text-danger" style="pointer-events:none">${escHtml(arg.event.title).replace(/\n/g, '<br>')}</div>` };
       }
 
       const fmtTime = d => `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
@@ -1229,11 +1229,11 @@ function initCalendar() {
       if (props.isPreview) {
         const client = clients.find(c => c.name === inputModeClient) || {};
         const clientColor = (client.color && client.color !== '') ? client.color : '#1565c0';
-        return { html: `<div class="ev-wrap">▸${escHtml(arg.event.title)}${timeRow}</div>` };
+        return { html: `<div class="ev-wrap">▸${escHtml(arg.event.title).replace(/\n/g, '<br>')}${timeRow}</div>` };
       }
 
       // 通常イベント: 会社名（色はイベントのbackgroundColor=会社色）+ パターン名テキスト
-      const patternName = escHtml(arg.event.title);
+      const patternName = escHtml(arg.event.title).replace(/\n/g, '<br>');
       return { html: `<div class="ev-wrap"><strong>${escHtml(props.clientName || '未設定')}</strong>: ${patternName}${timeRow}</div>` };
     },
 
@@ -1911,7 +1911,7 @@ function showEventPopover(info) {
   input.value = ev.title;
 
   // 位置計算（ビューポート境界を考慮）
-  const W = 260, H = 130;
+  const W = 260, H = 200;
   const vw = window.innerWidth, vh = window.innerHeight;
   let left = info.jsEvent.clientX + 12;
   let top  = info.jsEvent.clientY + 12;
